@@ -1,0 +1,61 @@
+name: CI (Build & Test)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend-ci:
+    name: Backend CI (.NET 10)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x' # Assuming .NET 10 as per csproj
+
+      - name: Restore Dependencies
+        run: dotnet restore Backend/SyntInfo.sln
+
+      - name: Build
+        run: dotnet build Backend/SyntInfo.sln --configuration Release --no-restore
+
+      # Uncomment if test projects are added later
+      # - name: Test
+      #   run: dotnet test Backend/SyntInfo.sln --no-build --verbosity normal
+
+  frontend-ci:
+    name: Frontend CI (Angular 21)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Run Cypress Tests
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: frontend
+          build: npm run build
+          start: npm start
+          wait-on: 'http://localhost:4200'
+          browser: chrome
