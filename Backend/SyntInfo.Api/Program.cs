@@ -60,4 +60,7 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
+// Seed database
+await SyntInfo.Infrastructure.Persistence.DataSeeder.SeedAsync(app.Services);
+
 app.Run();
