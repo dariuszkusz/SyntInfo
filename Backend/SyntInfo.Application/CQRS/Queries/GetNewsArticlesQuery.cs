@@ -12,7 +12,11 @@ namespace SyntInfo.Application.CQRS.Queries
         public DateTime PublishedAt { get; set; }
         public List<string> SourceUrls { get; set; } = new();
         public string CategoryName { get; set; } = string.Empty;
+        public SyntInfo.Domain.Entities.SourceRegion Region { get; set; }
     }
 
-    public record GetNewsArticlesQuery(int Page = 1, int PageSize = 20);
+    public record GetNewsArticlesQuery(
+        int Page = 1, 
+        int PageSize = 20, 
+        SyntInfo.Domain.Entities.SourceRegion? Region = null);
 }

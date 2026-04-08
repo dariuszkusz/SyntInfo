@@ -26,7 +26,17 @@ namespace SyntInfo.Infrastructure.Persistence
             // Wykonaj migracje jesli jakichs brakuje (przydatne przy dewelopmencie).
             await dbContext.Database.MigrateAsync();
 
+            await SeedCategoriesAsync(dbContext);
             await SeedRssSourcesAsync(dbContext, configuration);
+        }
+
+        private static async Task SeedCategoriesAsync(AppDbContext dbContext)
+        {
+            if (!await dbContext.NewsCategories.AnyAsync(c => c.Name == "General"))
+            {
+                dbContext.NewsCategories.Add(new NewsCategory { Name = "General" });
+                await dbContext.SaveChangesAsync();
+            }
         }
 
         private static async Task SeedRssSourcesAsync(AppDbContext dbContext, IConfiguration configuration)

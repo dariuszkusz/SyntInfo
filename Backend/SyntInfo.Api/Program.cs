@@ -9,7 +9,10 @@ using System.Collections.Generic;
 using Wolverine;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Host.UseWolverine();
+builder.Host.UseWolverine(opts =>
+{
+    opts.Discovery.IncludeAssembly(typeof(SyntInfo.Application.CQRS.Handlers.GetNewsArticlesQueryHandler).Assembly);
+});
 
 
 // Add services to the container.

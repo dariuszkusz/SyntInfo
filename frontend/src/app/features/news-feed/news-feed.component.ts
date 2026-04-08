@@ -32,50 +32,84 @@ import { NewsStore } from '../../state/news.store';
             <p>Error loading news: {{ store.error() }}</p>
           </div>
         } @else {
-          <div class="grid gap-6">
-            @for (article of store.articles(); track article.id) {
-              <article class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-500 border border-transparent hover:border-primary/30">
-                <div class="flex justify-between items-start mb-3">
-                  <span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider rounded">
-                    {{ article.categoryName }}
-                  </span>
-                  <time class="text-[10px] opacity-40 font-mono">{{ article.publishedAt | date:'short' }}</time>
+          <!-- Section: Poland -->
+          <section class="mb-12">
+            <div class="flex items-center space-x-3 mb-6">
+              <span class="text-2xl">🇵🇱</span>
+              <h2 class="text-xl font-bold uppercase tracking-widest text-aux3">Polska</h2>
+              <div class="h-px flex-1 bg-primary/20"></div>
+            </div>
+            
+            <div class="grid gap-6">
+              @for (article of store.polandArticles(); track article.id) {
+                <ng-container *ngTemplateOutlet="articleCard; context: { $implicit: article }"></ng-container>
+              } @empty {
+                <div class="text-center py-10 opacity-40 italic">
+                  <p>Brak najnowszych wiadomości z Polski.</p>
                 </div>
-                
-                <h2 class="text-xl font-bold mb-3 leading-tight group-hover:text-primary transition-colors">
-                  {{ article.title }}
-                </h2>
-                
-                <p class="text-sm leading-relaxed opacity-80 mb-6 line-clamp-3">
-                  {{ article.summaryText }}
-                </p>
+              }
+            </div>
+          </section>
 
-                <div class="flex items-center justify-between">
-                  <div class="flex -space-x-2">
-                    <!-- Source badges -->
-                    @for (url of article.sourceUrls.slice(0, 3); track url) {
-                      <div class="w-6 h-6 rounded-full bg-aux1 border-2 border-white flex items-center justify-center overflow-hidden">
-                        <span class="text-[8px] font-bold">{{ url.charAt(0).toUpperCase() }}</span>
-                      </div>
-                    }
-                  </div>
-                  <button class="text-xs font-bold uppercase tracking-widest text-aux3 hover:text-primary flex items-center group/btn">
-                    Read More 
-                    <span class="ml-1 group-hover/btn:translate-x-1 transition-transform">→</span>
-                  </button>
+          <!-- Section: World -->
+          <section>
+            <div class="flex items-center space-x-3 mb-6">
+              <span class="text-2xl">🌍</span>
+              <h2 class="text-xl font-bold uppercase tracking-widest text-aux3">Świat</h2>
+              <div class="h-px flex-1 bg-primary/20"></div>
+            </div>
+            
+            <div class="grid gap-6">
+              @for (article of store.worldArticles(); track article.id) {
+                <ng-container *ngTemplateOutlet="articleCard; context: { $implicit: article }"></ng-container>
+              } @empty {
+                <div class="text-center py-10 opacity-40 italic">
+                  <p>Brak najnowszych wiadomości ze świata.</p>
                 </div>
-              </article>
-            } @empty {
-              <div class="text-center py-20 opacity-40">
-                <p class="italic">No news clusters found yet. Check back in a moment.</p>
-              </div>
-            }
-          </div>
+              }
+            </div>
+          </section>
         }
       </main>
 
+      <!-- Article Card Template -->
+      <ng-template #articleCard let-article>
+        <article class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-500 border border-transparent hover:border-primary/30">
+          <div class="flex justify-between items-start mb-3">
+            <span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider rounded">
+              {{ article.categoryName }}
+            </span>
+            <time class="text-[10px] opacity-40 font-mono">{{ article.publishedAt | date:'short' }}</time>
+          </div>
+          
+          <h2 class="text-xl font-bold mb-3 leading-tight group-hover:text-primary transition-colors">
+            {{ article.title }}
+          </h2>
+          
+          <p class="text-sm leading-relaxed opacity-80 mb-6 line-clamp-3">
+            {{ article.summaryText }}
+          </p>
+
+          <div class="flex items-center justify-between">
+            <div class="flex -space-x-2">
+              @for (url of article.sourceUrls.slice(0, 3); track url) {
+                <div class="w-6 h-6 rounded-full bg-aux1 border-2 border-white flex items-center justify-center overflow-hidden">
+                  <span class="text-[8px] font-bold">{{ url.charAt(0).toUpperCase() }}</span>
+                </div>
+              }
+            </div>
+            <button class="text-xs font-bold uppercase tracking-widest text-aux3 hover:text-primary flex items-center group/btn">
+              Czytaj więcej 
+              <span class="ml-1 group-hover/btn:translate-x-1 transition-transform">→</span>
+            </button>
+          </div>
+        </article>
+      </ng-template>
+
       <!-- Floating Action Button for Mobile / PWA -->
-      <button class="fixed bottom-6 right-6 w-14 h-14 bg-aux3 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:hidden">
+      <button 
+        (click)="store.loadTopNews()"
+        class="fixed bottom-6 right-6 w-14 h-14 bg-aux3 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:hidden">
         <span class="text-xl">⚡</span>
       </button>
     </div>
@@ -92,6 +126,6 @@ export class NewsFeedComponent implements OnInit {
   readonly store = inject(NewsStore);
 
   ngOnInit() {
-    this.store.loadArticles();
+    this.store.loadTopNews();
   }
 }
