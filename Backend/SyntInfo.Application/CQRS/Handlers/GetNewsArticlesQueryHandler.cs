@@ -11,7 +11,7 @@ using SyntInfo.Domain.Interfaces;
 
 namespace SyntInfo.Application.CQRS.Handlers
 {
-    public class GetNewsArticlesQueryHandler : IQueryHandler<GetNewsArticlesQuery, List<NewsArticleDto>>
+    public class GetNewsArticlesQueryHandler
     {
         private readonly IUnitOfWork _uow;
 
@@ -20,9 +20,16 @@ namespace SyntInfo.Application.CQRS.Handlers
             _uow = uow;
         }
 
-        public async Task<List<NewsArticleDto>> HandleAsync(GetNewsArticlesQuery query, CancellationToken cancellationToken = default)
+        public async Task<List<NewsArticleDto>> Handle(GetNewsArticlesQuery query, CancellationToken cancellationToken = default)
         {
-            var articles = await _uow.Repository<NewsArticle>().Query()
+            var dbQuery = _uow.Repository<NewsArticle>().Query();
+
+            if (query.Region.HasValue)
+            {
+                dbQuery = dbQuery.Where(a => a.Region == query.Region.Value);
+            }
+
+            var articles = await dbQuery
                 .Include(a => a.Category)
                 .OrderByDescending(a => a.PublishedAt)
                 .Skip((query.Page - 1) * query.PageSize)
@@ -34,7 +41,8 @@ namespace SyntInfo.Application.CQRS.Handlers
                     SummaryText = a.SummaryText,
                     PublishedAt = a.PublishedAt,
                     SourceUrls = a.SourceUrls,
-                    CategoryName = a.Category != null ? a.Category.Name : "General"
+                    CategoryName = a.Category != null ? a.Category.Name : "General",
+                    Region = a.Region
                 })
                 .ToListAsync(cancellationToken);
 

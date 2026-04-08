@@ -17,4 +17,6 @@ public class NewsArticle
 
     public Guid CategoryId { get; set; }
     public NewsCategory? Category { get; set; }
+    
+    public SourceRegion Region { get; set; }
 }

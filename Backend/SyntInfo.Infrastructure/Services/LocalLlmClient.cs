@@ -47,19 +47,32 @@ namespace SyntInfo.Infrastructure.Services
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, CancellationToken cancellationToken = default)
         {
-            var request = new
+            try
             {
-                model = _modelName,
-                input = text
-            };
+                var request = new
+                {
+                    model = _modelName,
+                    input = text
+                };
 
-            var response = await _httpClient.PostAsJsonAsync("v1/embeddings", request, cancellationToken);
-            response.EnsureSuccessStatusCode();
+                var response = await _httpClient.PostAsJsonAsync("v1/embeddings", request, cancellationToken);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    System.Console.WriteLine($"[LLM Error] Embeddings failed: {response.StatusCode} - {errorBody}");
+                    return System.Array.Empty<float>();
+                }
 
-            var result = await response.Content.ReadFromJsonAsync<OpenAIEmbeddingResponse>(cancellationToken: cancellationToken);
-            if (result?.Data != null && result.Data.Count > 0)
+                var result = await response.Content.ReadFromJsonAsync<OpenAIEmbeddingResponse>(cancellationToken: cancellationToken);
+                if (result?.Data != null && result.Data.Count > 0)
+                {
+                    return result.Data[0].Embedding;
+                }
+            }
+            catch (System.Exception ex)
             {
-                return result.Data[0].Embedding;
+                System.Console.WriteLine($"[LLM Exception] Embeddings: {ex.Message}");
             }
 
             return System.Array.Empty<float>();
