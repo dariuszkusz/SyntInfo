@@ -25,7 +25,7 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.SummaryText).IsRequired().HasMaxLength(1500); // Max 500 znakow dla UI, ale dajemy zapas
+            entity.Property(e => e.SummaryText).IsRequired().HasMaxLength(5000); // Zapas na fallback z LLM
             
             // Konfiguracja wektora (wymiar 3072 dla Llama 3.2 lub wg potrzeb modelu)
             // Llama 3.2 1B ma zazwyczaj 2048, 3B ma 3072. 

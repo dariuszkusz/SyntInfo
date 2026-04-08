@@ -6,6 +6,7 @@ public class NewsArticle
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = string.Empty;
+    public string OriginalTitle { get; set; } = string.Empty;
     public string SummaryText { get; set; } = string.Empty;
     public DateTime PublishedAt { get; set; } = DateTime.UtcNow;
     

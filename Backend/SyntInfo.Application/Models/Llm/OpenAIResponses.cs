@@ -35,4 +35,16 @@ namespace SyntInfo.Application.Models.Llm
         [JsonPropertyName("embedding")]
         public float[] Embedding { get; set; } = System.Array.Empty<float>();
     }
+
+    public class InfopigulaContent
+    {
+        [JsonPropertyName("title")]
+        public string Title { get; set; } = string.Empty;
+
+        [JsonPropertyName("essence")]
+        public string Essence { get; set; } = string.Empty;
+
+        [JsonPropertyName("category")]
+        public string Category { get; set; } = string.Empty;
+    }
 }

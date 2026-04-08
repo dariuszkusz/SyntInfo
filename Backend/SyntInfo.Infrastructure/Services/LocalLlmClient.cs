@@ -27,10 +27,11 @@ namespace SyntInfo.Infrastructure.Services
                 model = _modelName,
                 messages = new[]
                 {
-                    new { role = "system", content = "You are an expert journalist. Summarize the following news text concisely." },
+                    new { role = "system", content = "Jesteś architektem informacji. Twoim zadaniem jest przekształcenie artykułów informacyjnych w czystą 'Infopigułę'.\n\nZasady:\n1. TYTUŁ: Stwórz faktyczny, neutralny nagłówek pozbawiony clickbaitu w języku polskim.\n2. ESENCJA: Wyciągnij kluczowe fakty w formie 3 konkretnych akapitów. Łączna długość tekstu esencji MUSI mieścić się w przedziale 300-700 znaków. Każdy fakt powinien być treściwy i precyzyjny.\n3. KATEGORIA: Przypisz jedną kategorię (np. BIZNES, POLITYKA, TECH, ŚWIAT, PL).\n4. FORMAT: Zwróć WYŁĄCZNIE obiekt JSON: {\"title\": \"...\", \"essence\": \"...\", \"category\": \"...\"}." },
                     new { role = "user", content = text }
                 },
-                temperature = 0.3
+                temperature = 0.2, // Niższa temperatura dla większej stabilności JSONa
+                response_format = new { type = "json_object" }
             };
 
             var response = await _httpClient.PostAsJsonAsync("v1/chat/completions", request, cancellationToken);

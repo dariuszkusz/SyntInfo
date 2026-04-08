@@ -20,6 +20,7 @@ namespace SyntInfo.Application.CQRS.Handlers
         private readonly IMessageBus _bus;
         private readonly ILlmClient _llmClient;
         private readonly ILogger<RssCommandsHandler> _logger;
+        private static readonly SemaphoreSlim _aiSemaphore = new SemaphoreSlim(1, 1);
 
         public RssCommandsHandler(
             IUnitOfWork uow, 
@@ -96,39 +97,99 @@ namespace SyntInfo.Application.CQRS.Handlers
 
         public async Task Handle(SummarizeArticleCommand command, CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Przetwarzanie (LLM) dla {Title}", command.Title);
-            
-            var summary = await _llmClient.GenerateSummaryAsync(command.Content, cancellationToken);
-            if (string.IsNullOrWhiteSpace(summary))
-                summary = "Nie udało się wygenerować streszczenia.";
+            // Tworzymy bezpieczny token (10 minut), ignorując krótki timeout Wolverine
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+            var safeToken = cts.Token;
 
-            var embedding = await _llmClient.GenerateEmbeddingsAsync(summary, cancellationToken);
-
-            var category = await _uow.Repository<NewsCategory>().Query()
-                .FirstOrDefaultAsync(c => c.Name == "General", cancellationToken);
-            
-            if (category == null)
+            await _aiSemaphore.WaitAsync(safeToken);
+            try 
             {
-                category = new NewsCategory { Name = "General" };
-                await _uow.Repository<NewsCategory>().AddAsync(category, cancellationToken);
-                await _uow.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation("Przetwarzanie (LLM) dla {Title}", command.Title);
+                
+                var aiResponseRaw = await _llmClient.GenerateSummaryAsync(command.Content, safeToken);
+                
+                // Wyciągamy PIERWSZY kompletny blok JSON (ignorujemy kolejne bloki)
+                var aiResponseJson = aiResponseRaw.Trim();
+                var firstBrace = aiResponseJson.IndexOf('{');
+                if (firstBrace >= 0)
+                {
+                    // Szukamy zamykającej klamry PIERWSZEGO obiektu JSON (z obsługą zagnieżdżeń)
+                    int depth = 0;
+                    int endBrace = -1;
+                    for (int i = firstBrace; i < aiResponseJson.Length; i++)
+                    {
+                        if (aiResponseJson[i] == '{') depth++;
+                        else if (aiResponseJson[i] == '}') 
+                        {
+                            depth--;
+                            if (depth == 0) { endBrace = i; break; }
+                        }
+                    }
+                    if (endBrace > firstBrace)
+                        aiResponseJson = aiResponseJson.Substring(firstBrace, endBrace - firstBrace + 1);
+                }
+
+                string displayTitle = command.Title;
+                string essence = "Nie udało się wygenerować streszczenia.";
+                string categoryName = "General";
+
+                try 
+                {
+                    var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var structuredContent = System.Text.Json.JsonSerializer.Deserialize<SyntInfo.Application.Models.Llm.InfopigulaContent>(aiResponseJson, options);
+                    
+                    if (structuredContent != null && !string.IsNullOrWhiteSpace(structuredContent.Title))
+                    {
+                        displayTitle = structuredContent.Title;
+                        essence = structuredContent.Essence;
+                        categoryName = structuredContent.Category ?? "General";
+                    }
+                    else 
+                    {
+                        // Fallback – przycinamy do bezpiecznej długości
+                        essence = aiResponseRaw.Length > 4500 ? aiResponseRaw.Substring(0, 4500) : aiResponseRaw;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Błąd parsowania JSON z LLM. Użycie danych surowych. Raw: {Raw}", aiResponseRaw);
+                    // Fallback – przycinamy do bezpiecznej długości przed zapisem do bazy
+                    essence = aiResponseRaw.Length > 4500 ? aiResponseRaw.Substring(0, 4500) : aiResponseRaw;
+                }
+
+                var embedding = await _llmClient.GenerateEmbeddingsAsync(essence, safeToken);
+
+                var category = await _uow.Repository<NewsCategory>().Query()
+                    .FirstOrDefaultAsync(c => c.Name == categoryName, safeToken);
+                
+                if (category == null)
+                {
+                    category = new NewsCategory { Name = categoryName };
+                    await _uow.Repository<NewsCategory>().AddAsync(category, safeToken);
+                    await _uow.SaveChangesAsync(safeToken);
+                }
+
+                var article = new NewsArticle
+                {
+                    Title = displayTitle,
+                    OriginalTitle = command.Title,
+                    SummaryText = essence,
+                    PublishedAt = command.PublishedAt,
+                    SourceUrls = new List<string> { command.Url },
+                    Region = command.Region,
+                    CategoryId = category.Id,
+                    Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null
+                };
+
+                await _uow.Repository<NewsArticle>().AddAsync(article, safeToken);
+                await _uow.SaveChangesAsync(safeToken);
+                
+                _logger.LogInformation("Zapisano przetworzony artykuł: {Title}", command.Title);
             }
-
-            var article = new NewsArticle
+            finally 
             {
-                Title = command.Title,
-                SummaryText = summary,
-                PublishedAt = command.PublishedAt,
-                SourceUrls = new List<string> { command.Url },
-                Region = command.Region,
-                CategoryId = category.Id,
-                Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null
-            };
-
-            await _uow.Repository<NewsArticle>().AddAsync(article, cancellationToken);
-            await _uow.SaveChangesAsync(cancellationToken);
-            
-            _logger.LogInformation("Zapisano przetworzony artykuł: {Title}", command.Title);
+                _aiSemaphore.Release();
+            }
         }
     }
 }

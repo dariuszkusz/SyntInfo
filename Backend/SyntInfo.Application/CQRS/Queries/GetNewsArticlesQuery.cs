@@ -8,6 +8,7 @@ namespace SyntInfo.Application.CQRS.Queries
     {
         public Guid Id { get; set; }
         public string Title { get; set; } = string.Empty;
+        public string OriginalTitle { get; set; } = string.Empty;
         public string SummaryText { get; set; } = string.Empty;
         public DateTime PublishedAt { get; set; }
         public List<string> SourceUrls { get; set; } = new();

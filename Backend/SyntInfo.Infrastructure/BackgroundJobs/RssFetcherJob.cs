@@ -5,6 +5,7 @@ using Wolverine;
 
 namespace SyntInfo.Infrastructure.BackgroundJobs;
 
+[DisallowConcurrentExecution]
 public class RssFetcherJob : IJob
 {
     private readonly ILogger<RssFetcherJob> _logger;
@@ -18,9 +19,12 @@ public class RssFetcherJob : IJob
 
     public async Task Execute(IJobExecutionContext context)
     {
-        _logger.LogInformation("Wyzwalanie procesu pobierania RSS przez Wolverine {Time}", DateTime.UtcNow);
+        _logger.LogInformation("Wyzwalanie procesów tła (RSS + Cleanup) {Time}", DateTime.UtcNow);
         
-        // Wysyłamy komendę do Wolverine
+        // 1. Pobieranie nowych newsów
         await _bus.PublishAsync(new TriggerRssFetchCommand());
+
+        // 2. Usuwanie starych newsów (starszych niż 7 dni)
+        await _bus.PublishAsync(new CleanupOldArticlesCommand(DaysToKeep: 7));
     }
 }
