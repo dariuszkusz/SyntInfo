@@ -10,6 +10,7 @@
     <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
     <PackageReference Include="Quartz.Extensions.DependencyInjection" Version="3.8.*" />
     <PackageReference Include="Quartz.Extensions.Hosting" Version="3.8.*" />
+    <PackageReference Include="WolverineFx" Version="5.28.0" />
   </ItemGroup>
 
   <PropertyGroup>

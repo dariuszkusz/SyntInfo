@@ -2,13 +2,15 @@ using Microsoft.EntityFrameworkCore;
 using Quartz;
 using SyntInfo.Infrastructure.Persistence;
 using SyntInfo.Application.Interfaces;
-using SyntInfo.Application.Services;
 using SyntInfo.Domain.Interfaces;
 using SyntInfo.Application.CQRS.Queries;
 using SyntInfo.Application.CQRS.Handlers;
 using System.Collections.Generic;
+using Wolverine;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWolverine();
+
 
 // Add services to the container.
 // PWA API: Baza Danych PostgreSQL z rozszerzeniem pgvector
@@ -21,10 +23,8 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Rejestracja CQRS i UnitOfWork
+// Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-builder.Services.AddScoped<ICqrsBus, CqrsBus>();
-builder.Services.AddScoped<IQueryHandler<GetNewsArticlesQuery, List<NewsArticleDto>>, GetNewsArticlesQueryHandler>();
 
 // Rejestracja klienta LLM
 builder.Services.AddHttpClient<SyntInfo.Application.Interfaces.ILlmClient, SyntInfo.Infrastructure.Services.LocalLlmClient>(client =>

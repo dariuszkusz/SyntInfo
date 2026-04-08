@@ -14,5 +14,5 @@ namespace SyntInfo.Application.CQRS.Queries
         public string CategoryName { get; set; } = string.Empty;
     }
 
-    public record GetNewsArticlesQuery(int Page = 1, int PageSize = 20) : IQuery<List<NewsArticleDto>>;
+    public record GetNewsArticlesQuery(int Page = 1, int PageSize = 20);
 }

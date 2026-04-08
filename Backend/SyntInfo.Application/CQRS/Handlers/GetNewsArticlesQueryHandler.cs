@@ -11,7 +11,7 @@ using SyntInfo.Domain.Interfaces;
 
 namespace SyntInfo.Application.CQRS.Handlers
 {
-    public class GetNewsArticlesQueryHandler : IQueryHandler<GetNewsArticlesQuery, List<NewsArticleDto>>
+    public class GetNewsArticlesQueryHandler
     {
         private readonly IUnitOfWork _uow;
 
@@ -20,7 +20,7 @@ namespace SyntInfo.Application.CQRS.Handlers
             _uow = uow;
         }
 
-        public async Task<List<NewsArticleDto>> HandleAsync(GetNewsArticlesQuery query, CancellationToken cancellationToken = default)
+        public async Task<List<NewsArticleDto>> Handle(GetNewsArticlesQuery query, CancellationToken cancellationToken = default)
         {
             var articles = await _uow.Repository<NewsArticle>().Query()
                 .Include(a => a.Category)
