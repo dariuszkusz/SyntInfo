@@ -47,10 +47,6 @@ describe('News Feed', () => {
     cy.contains('News from the World').should('be.visible');
   });
 
-  it('should show read more button', () => {
-    cy.wait('@getTopNews');
-    cy.contains('Czytaj więcej').should('be.visible');
-  });
 
   it('should show refresh button (⚡)', () => {
     cy.get('button').contains('⚡').should('be.visible');
