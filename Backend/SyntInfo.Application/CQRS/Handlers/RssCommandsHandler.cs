@@ -11,6 +11,7 @@ using SyntInfo.Domain.Entities;
 using SyntInfo.Domain.Interfaces;
 using Wolverine;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
 namespace SyntInfo.Application.CQRS.Handlers
 {
@@ -20,18 +21,21 @@ namespace SyntInfo.Application.CQRS.Handlers
         private readonly IMessageBus _bus;
         private readonly ILlmClient _llmClient;
         private readonly ILogger<RssCommandsHandler> _logger;
+        private readonly IConfiguration _configuration;
         private static readonly SemaphoreSlim _aiSemaphore = new SemaphoreSlim(1, 1);
 
         public RssCommandsHandler(
             IUnitOfWork uow, 
             IMessageBus bus, 
             ILlmClient llmClient,
-            ILogger<RssCommandsHandler> logger)
+            ILogger<RssCommandsHandler> logger,
+            IConfiguration configuration)
         {
             _uow = uow;
             _bus = bus;
             _llmClient = llmClient;
             _logger = logger;
+            _configuration = configuration;
         }
 
         public async Task Handle(TriggerRssFetchCommand command, CancellationToken cancellationToken)
@@ -83,10 +87,26 @@ namespace SyntInfo.Application.CQRS.Handlers
 
             await _uow.SaveChangesAsync(cancellationToken);
 
-            // Mechanizm "prostego kolejkowania" / paczkowania (max 5 na jedną rundę chroni LLM)
-            var batchToProcess = newArticlesToProcess.OrderByDescending(a => a.PublishedAt).Take(5).ToList();
+            // Pobieramy limit z konfiguracji (domyślnie 5 jeśli brak zapisu)
+            var maxPerRegion = _configuration.GetValue<int>("ProcessingSettings:MaxArticlesPerRegion", 5);
+
+            // Mechanizm "prostego kolejkowania" / paczkowania - osobno dla regionów
+            var polandBatch = newArticlesToProcess
+                .Where(a => a.Region == SourceRegion.Poland)
+                .OrderByDescending(a => a.PublishedAt)
+                .Take(maxPerRegion)
+                .ToList();
+
+            var worldBatch = newArticlesToProcess
+                .Where(a => a.Region == SourceRegion.World)
+                .OrderByDescending(a => a.PublishedAt)
+                .Take(maxPerRegion)
+                .ToList();
+
+            var batchToProcess = polandBatch.Concat(worldBatch).ToList();
             
-            _logger.LogInformation("Znaleziono {Count} nowych newsow. Przekazano {BatchCount} do LLM.", newArticlesToProcess.Count, batchToProcess.Count);
+            _logger.LogInformation("Znaleziono {Count} nowych newsow. Przekazano {BatchCount} do LLM (PL: {PlCount}, World: {WorldCount}). Luimit per region: {Limit}", 
+                newArticlesToProcess.Count, batchToProcess.Count, polandBatch.Count, worldBatch.Count, maxPerRegion);
 
             foreach (var articleCmd in batchToProcess)
             {

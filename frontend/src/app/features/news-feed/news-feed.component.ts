@@ -1,11 +1,15 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NewsStore } from '../../state/news.store';
+import { NgIconComponent, provideIcons } from '@ng-icons/core';
+import { flagPl } from '@ng-icons/flag-icons';
+import { lucideGlobe } from '@ng-icons/lucide';
 
 @Component({
   selector: 'app-news-feed',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, NgIconComponent],
+  providers: [provideIcons({ flagPl, lucideGlobe })],
   template: `
     <div class="min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
       <!-- Header -->
@@ -42,7 +46,7 @@ import { NewsStore } from '../../state/news.store';
           <!-- Section: Poland -->
           <section class="mb-12">
             <div class="flex items-center space-x-3 mb-6">
-              <span class="text-2xl">🇵🇱</span>
+              <ng-icon name="flagPl" class="text-2xl"></ng-icon>
               <h2 class="text-xl font-bold uppercase tracking-widest text-aux3">Polska</h2>
               <div class="h-px flex-1 bg-primary/20"></div>
             </div>
@@ -61,7 +65,7 @@ import { NewsStore } from '../../state/news.store';
           <!-- Section: World -->
           <section>
             <div class="flex items-center space-x-3 mb-6">
-              <span class="text-2xl">🌍</span>
+              <ng-icon name="lucideGlobe" class="text-2xl text-primary"></ng-icon>
               <h2 class="text-xl font-bold uppercase tracking-widest text-aux3">Świat</h2>
               <div class="h-px flex-1 bg-primary/20"></div>
             </div>
