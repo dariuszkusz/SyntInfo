@@ -22,7 +22,9 @@ namespace SyntInfo.Application.CQRS.Handlers
 
         public async Task<List<NewsArticleDto>> Handle(GetNewsArticlesQuery query, CancellationToken cancellationToken = default)
         {
-            var dbQuery = _uow.Repository<NewsArticle>().Query();
+            var cutoffDate = DateTime.UtcNow.AddHours(-24);
+            var dbQuery = _uow.Repository<NewsArticle>().Query()
+                .Where(a => a.PublishedAt >= cutoffDate);
 
             if (query.Region.HasValue)
             {
@@ -38,6 +40,7 @@ namespace SyntInfo.Application.CQRS.Handlers
                 {
                     Id = a.Id,
                     Title = a.Title,
+                    OriginalTitle = a.OriginalTitle,
                     SummaryText = a.SummaryText,
                     PublishedAt = a.PublishedAt,
                     SourceUrls = a.SourceUrls,

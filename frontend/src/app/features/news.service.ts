@@ -10,6 +10,7 @@ export enum SourceRegion {
 export interface NewsArticle {
   id: string;
   title: string;
+  originalTitle: string;
   summaryText: string;
   publishedAt: string;
   sourceUrls: string[];
@@ -39,5 +40,9 @@ export class NewsService {
 
   getTopNews(): Observable<TopNewsResponse> {
     return this.http.get<TopNewsResponse>(`${this.apiUrl}/top`);
+  }
+
+  syncNews(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sync`, {});
   }
 }

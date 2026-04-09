@@ -34,6 +34,7 @@ builder.Services.AddHttpClient<SyntInfo.Application.Interfaces.ILlmClient, SyntI
 {
     var llmUrl = builder.Configuration["Llm:BaseUrl"] ?? "http://localhost:11434/";
     client.BaseAddress = new Uri(llmUrl);
+    client.Timeout = TimeSpan.FromMinutes(5); // Zwiększony timeout dla lokalnego modelu LLM
 });
 
 // Konfiguracja zadań w tle (Quartz)
@@ -42,11 +43,11 @@ builder.Services.AddQuartz(q =>
     var jobKey = new JobKey("RssFetcherJob");
     q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.RssFetcherJob>(opts => opts.WithIdentity(jobKey));
 
-    // Odpalanie co 2 minuty (do testów, w prodzie co np. godzinę)
+    // Odpalanie 2 razy dziennie (7:00 i 19:00)
     q.AddTrigger(opts => opts
         .ForJob(jobKey)
         .WithIdentity("RssFetcherJob-trigger")
-        .WithSimpleSchedule(x => x.WithIntervalInMinutes(2).RepeatForever()));
+        .WithCronSchedule("0 0 7,19 * * ?")); // O godzinie 7:00 i 19:00 codziennie
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 

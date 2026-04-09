@@ -53,6 +53,19 @@ export const NewsStore = signalStore(
           )
         )
       )
+    ),
+    syncNews: rxMethod<void>(
+      pipe(
+        tap(() => console.log('Ręczna synchronizacja uruchomiona...')),
+        switchMap(() => 
+          newsService.syncNews().pipe(
+            tap({
+              next: () => console.log('Synchronizacja zakończona powodzeniem (proces tła).'),
+              error: (err: any) => console.error('Błąd synchronizacji:', err)
+            })
+          )
+        )
+      )
     )
   }))
 );

@@ -1,11 +1,15 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NewsStore } from '../../state/news.store';
+import { NgIconComponent, provideIcons } from '@ng-icons/core';
+import { flagPl } from '@ng-icons/flag-icons';
+import { lucideGlobe } from '@ng-icons/lucide';
 
 @Component({
   selector: 'app-news-feed',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, NgIconComponent],
+  providers: [provideIcons({ flagPl, lucideGlobe })],
   template: `
     <div class="min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
       <!-- Header -->
@@ -14,8 +18,15 @@ import { NewsStore } from '../../state/news.store';
           <h1 class="text-2xl font-bold tracking-tight text-aux3">
             Synt<span class="text-primary italic">Info</span>
           </h1>
-          <div class="text-xs uppercase tracking-widest font-semibold opacity-60">
-            Automated AI News Aggregator
+          <div class="flex items-center space-x-4">
+            <button 
+              (click)="store.syncNews()"
+              class="text-[10px] px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all font-bold uppercase tracking-wider">
+              Sync On Demand
+            </button>
+            <div class="text-xs uppercase tracking-widest font-semibold opacity-60">
+              Automated AI News Aggregator
+            </div>
           </div>
         </div>
       </header>
@@ -35,7 +46,7 @@ import { NewsStore } from '../../state/news.store';
           <!-- Section: Poland -->
           <section class="mb-12">
             <div class="flex items-center space-x-3 mb-6">
-              <span class="text-2xl">🇵🇱</span>
+              <ng-icon name="flagPl" class="text-2xl"></ng-icon>
               <h2 class="text-xl font-bold uppercase tracking-widest text-aux3">Polska</h2>
               <div class="h-px flex-1 bg-primary/20"></div>
             </div>
@@ -54,7 +65,7 @@ import { NewsStore } from '../../state/news.store';
           <!-- Section: World -->
           <section>
             <div class="flex items-center space-x-3 mb-6">
-              <span class="text-2xl">🌍</span>
+              <ng-icon name="lucideGlobe" class="text-2xl text-primary"></ng-icon>
               <h2 class="text-xl font-bold uppercase tracking-widest text-aux3">Świat</h2>
               <div class="h-px flex-1 bg-primary/20"></div>
             </div>
@@ -74,34 +85,42 @@ import { NewsStore } from '../../state/news.store';
 
       <!-- Article Card Template -->
       <ng-template #articleCard let-article>
-        <article class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-500 border border-transparent hover:border-primary/30">
-          <div class="flex justify-between items-start mb-3">
-            <span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider rounded">
+        <article class="bg-white rounded-3xl p-8 mb-4 border border-aux1/50 transition-all">
+          <div class="flex justify-between items-center mb-6">
+            <span class="px-3 py-1 bg-aux1 text-aux3 text-[10px] font-bold uppercase tracking-[0.2em] rounded-full">
               {{ article.categoryName }}
             </span>
-            <time class="text-[10px] opacity-40 font-mono">{{ article.publishedAt | date:'short' }}</time>
+            <time class="text-[10px] opacity-30 font-medium">{{ article.publishedAt | date:'short' }}</time>
           </div>
           
-          <h2 class="text-xl font-bold mb-3 leading-tight group-hover:text-primary transition-colors">
+          <h2 class="text-2xl font-bold mb-6 leading-tight text-aux3">
             {{ article.title }}
           </h2>
           
-          <p class="text-sm leading-relaxed opacity-80 mb-6 line-clamp-3">
+          <div class="text-[15px] leading-relaxed text-aux2 opacity-90 mb-8 whitespace-pre-wrap tracking-wide space-y-4">
             {{ article.summaryText }}
-          </p>
+          </div>
 
-          <div class="flex items-center justify-between">
-            <div class="flex -space-x-2">
-              @for (url of article.sourceUrls.slice(0, 3); track url) {
-                <div class="w-6 h-6 rounded-full bg-aux1 border-2 border-white flex items-center justify-center overflow-hidden">
-                  <span class="text-[8px] font-bold">{{ url.charAt(0).toUpperCase() }}</span>
-                </div>
+          <div class="flex items-center justify-between pt-6 border-t border-aux1/30">
+            <div class="flex items-center space-x-3">
+              @for (url of article.sourceUrls; track url) {
+                <a [href]="url" target="_blank" rel="noopener" class="group/icon relative">
+                  <div class="w-8 h-8 rounded-xl bg-aux1/30 flex items-center justify-center hover:bg-aux1 transition-colors">
+                    <img 
+                      [src]="'https://www.google.com/s2/favicons?domain=' + url + '&sz=64'" 
+                      class="w-4 h-4 grayscale group-hover/icon:grayscale-0 transition-all"
+                      alt="source">
+                  </div>
+                  <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-aux3 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover/icon:opacity-100 transition-opacity whitespace-nowrap">
+                    Otwórz źródło
+                  </span>
+                </a>
               }
             </div>
-            <button class="text-xs font-bold uppercase tracking-widest text-aux3 hover:text-primary flex items-center group/btn">
-              Czytaj więcej 
-              <span class="ml-1 group-hover/btn:translate-x-1 transition-transform">→</span>
-            </button>
+            
+            <div class="text-[9px] uppercase tracking-widest font-bold opacity-30 italic">
+              AI Summarized Essence
+            </div>
           </div>
         </article>
       </ng-template>
@@ -109,8 +128,8 @@ import { NewsStore } from '../../state/news.store';
       <!-- Floating Action Button for Mobile / PWA -->
       <button 
         (click)="store.loadTopNews()"
-        class="fixed bottom-6 right-6 w-14 h-14 bg-aux3 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all lg:hidden">
-        <span class="text-xl">⚡</span>
+        class="fixed bottom-8 right-8 w-16 h-16 bg-aux3 text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all lg:hidden z-50">
+        <span class="text-2xl">⚡</span>
       </button>
     </div>
   `,
@@ -118,7 +137,13 @@ import { NewsStore } from '../../state/news.store';
     `
     :host {
       display: block;
+      background-color: #f4f7f6; /* Odświeżenie tła na lżejsze */
     }
+    
+    .bg-aux1 { background-color: #e9edeb; }
+    .text-aux2 { color: #2d3436; }
+    .text-aux3 { color: #1e272e; }
+    .text-primary { color: #00b894; }
     `
   ]
 })

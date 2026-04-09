@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using SyntInfo.Application.CQRS.Queries;
+using SyntInfo.Application.CQRS.Commands;
 using SyntInfo.Application.Interfaces;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -41,6 +42,16 @@ namespace SyntInfo.Api.Controllers
                 Poland = polandNews,
                 World = worldNews
             });
+        }
+
+        [HttpPost("sync")]
+        public async Task<IActionResult> TriggerSync()
+        {
+            // Wyzwalamy procesy tła ręcznie
+            await _bus.PublishAsync(new TriggerRssFetchCommand());
+            await _bus.PublishAsync(new CleanupOldArticlesCommand(DaysToKeep: 7));
+            
+            return Accepted(new { Message = "Ręczna synchronizacja uruchomiona." });
         }
     }
 
