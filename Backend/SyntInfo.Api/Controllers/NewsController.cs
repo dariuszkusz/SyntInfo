@@ -53,6 +53,13 @@ namespace SyntInfo.Api.Controllers
             
             return Accepted(new { Message = "Ręczna synchronizacja uruchomiona." });
         }
+
+        [HttpPost("clear")]
+        public async Task<IActionResult> ClearArticles()
+        {
+            await _bus.PublishAsync(new ClearAllArticlesCommand());
+            return Ok(new { Message = "Baza danych została wyczyszczona." });
+        }
     }
 
     public class TopNewsResponse

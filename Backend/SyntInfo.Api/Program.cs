@@ -18,7 +18,8 @@ builder.Host.UseWolverine(opts =>
 // Add services to the container.
 // PWA API: Baza Danych PostgreSQL z rozszerzeniem pgvector
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), o => o.UseVector()));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), 
+        o => o.UseVector().EnableRetryOnFailure()));
 
 
 builder.Services.AddControllers();
@@ -28,6 +29,7 @@ builder.Services.AddSwaggerGen();
 
 // Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddHttpClient();
 
 // Rejestracja klienta LLM
 builder.Services.AddHttpClient<SyntInfo.Application.Interfaces.ILlmClient, SyntInfo.Infrastructure.Services.LocalLlmClient>(client =>

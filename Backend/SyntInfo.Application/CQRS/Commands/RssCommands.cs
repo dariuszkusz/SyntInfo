@@ -11,4 +11,6 @@ namespace SyntInfo.Application.CQRS.Commands
         DateTime PublishedAt, 
         Guid SourceId,
         SyntInfo.Domain.Entities.SourceRegion Region);
+
+    public record ClearAllArticlesCommand();
 }

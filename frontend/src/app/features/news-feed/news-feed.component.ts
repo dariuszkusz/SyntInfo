@@ -24,6 +24,11 @@ import { lucideGlobe } from '@ng-icons/lucide';
               class="text-[10px] px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all font-bold uppercase tracking-wider">
               Sync On Demand
             </button>
+            <button 
+              (click)="store.clearNews()"
+              class="text-[10px] px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-all font-bold uppercase tracking-wider">
+              Wyczyść bazę
+            </button>
             <div class="text-xs uppercase tracking-widest font-semibold opacity-60">
               Automated AI News Aggregator
             </div>
