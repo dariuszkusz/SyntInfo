@@ -66,6 +66,26 @@ export const NewsStore = signalStore(
           )
         )
       )
+    ),
+    clearNews: rxMethod<void>(
+      pipe(
+        tap(() => console.log('Czyszczenie bazy danych...')),
+        switchMap(() => 
+          newsService.clearNews().pipe(
+            tap({
+              next: () => {
+                console.log('Baza danych wyczyszczona.');
+                patchState(store, { 
+                  polandArticles: [], 
+                  worldArticles: [],
+                  articles: [] 
+                });
+              },
+              error: (err: any) => console.error('Błąd podczas czyszczenia bazy:', err)
+            })
+          )
+        )
+      )
     )
   }))
 );

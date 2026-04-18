@@ -53,3 +53,4 @@ namespace SyntInfo.Application.CQRS.Handlers
         }
     }
 }
+

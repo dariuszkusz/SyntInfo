@@ -19,7 +19,7 @@ namespace SyntInfo.Infrastructure.Services
             // Domyślny model to ai/llama3.2:latest, jak podał użytkownik
             _modelName = configuration["Llm:ModelName"] ?? "ai/llama3.2:latest";
         }
-
+        //Mechanizm zrobienia podsumowania po otrzymaniu tekstu
         public async Task<string> GenerateSummaryAsync(string text, CancellationToken cancellationToken = default)
         {
             var request = new
@@ -27,7 +27,7 @@ namespace SyntInfo.Infrastructure.Services
                 model = _modelName,
                 messages = new[]
                 {
-                    new { role = "system", content = "Jesteś architektem informacji. Twoim zadaniem jest przekształcenie artykułów informacyjnych w czystą 'Infopigułę'.\n\nZasady:\n1. TYTUŁ: Stwórz faktyczny, neutralny nagłówek pozbawiony clickbaitu w języku polskim.\n2. ESENCJA: Wyciągnij kluczowe fakty w formie 3 konkretnych akapitów. Łączna długość tekstu esencji MUSI mieścić się w przedziale 300-700 znaków. Każdy fakt powinien być treściwy i precyzyjny.\n3. KATEGORIA: Przypisz jedną kategorię (np. BIZNES, POLITYKA, TECH, ŚWIAT, PL).\n4. FORMAT: Zwróć WYŁĄCZNIE obiekt JSON: {\"title\": \"...\", \"essence\": \"...\", \"category\": \"...\"}." },
+                    new { role = "system", content = "Jesteś architektem informacji. Twoim zadaniem jest przekształcenie artykułów informacyjnych w czystą 'Infopigułę'.\n\nZasady:\n1. TYTUŁ: Stwórz faktyczny, neutralny nagłówek pozbawiony clickbaitu w języku polskim.\n2. ESENCJA: Wyciągnij kluczowe fakty w formie 3 konkretnych akapitów. Łączna długość tekstu esencji MUSI mieścić się w przedziale 300-700 znaków. Każdy fakt powinien być treściwy i precyzyjny.\n3. KATEGORIA: Przypisz jedną kategorię (np. BIZNES, POLITYKA, TECH, ŚWIAT, PL).\n4. FORMAT: Zwróć WYŁĄCZNIE czysty obiekt JSON: {\"title\": \"...\", \"essence\": \"...\", \"category\": \"...\"}. ABSOLUTNIE ZABRONIONE jest używanie konkatenacji stringów (np. znaku '+'), komentarzy lub jakiejkolwiek innej składni poza czystym JSON. Cała treść 'essence' musi być jednym ciągłym stringiem." },
                     new { role = "user", content = text }
                 },
                 temperature = 0.2, // Niższa temperatura dla większej stabilności JSONa
@@ -57,7 +57,7 @@ namespace SyntInfo.Infrastructure.Services
                 };
 
                 var response = await _httpClient.PostAsJsonAsync("v1/embeddings", request, cancellationToken);
-                
+
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);

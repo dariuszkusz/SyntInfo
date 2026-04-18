@@ -45,4 +45,8 @@ export class NewsService {
   syncNews(): Observable<any> {
     return this.http.post(`${this.apiUrl}/sync`, {});
   }
+
+  clearNews(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/clear`, {});
+  }
 }
