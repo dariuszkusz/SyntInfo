@@ -8,5 +8,7 @@ namespace SyntInfo.Application.Interfaces
     {
         Task<string> GenerateSummaryAsync(string text, CancellationToken cancellationToken = default);
         Task<float[]> GenerateEmbeddingsAsync(string text, CancellationToken cancellationToken = default);
+        Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, CancellationToken cancellationToken = default);
+        Task<string> GenerateEnrichedSummaryAsync(string basicContent, string searchContent, CancellationToken cancellationToken = default);
     }
 }

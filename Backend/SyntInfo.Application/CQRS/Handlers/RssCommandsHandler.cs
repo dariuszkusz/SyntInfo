@@ -7,6 +7,8 @@ using SyntInfo.Domain.Interfaces;
 using Wolverine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
+using Wolverine.Attributes;
 
 namespace SyntInfo.Application.CQRS.Handlers
 {
@@ -15,6 +17,7 @@ namespace SyntInfo.Application.CQRS.Handlers
         private readonly IUnitOfWork _uow;
         private readonly IMessageBus _bus;
         private readonly ILlmClient _llmClient;
+        private readonly ISearchService _searchService;
         private readonly ILogger<RssCommandsHandler> _logger;
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
@@ -24,6 +27,7 @@ namespace SyntInfo.Application.CQRS.Handlers
             IUnitOfWork uow,
             IMessageBus bus,
             ILlmClient llmClient,
+            ISearchService searchService,
             ILogger<RssCommandsHandler> logger,
             IConfiguration configuration,
             IHttpClientFactory httpClientFactory)
@@ -31,12 +35,14 @@ namespace SyntInfo.Application.CQRS.Handlers
             _uow = uow;
             _bus = bus;
             _llmClient = llmClient;
+            _searchService = searchService;
             _logger = logger;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
         }
 
-        public async Task Handle(TriggerRssFetchCommand command, CancellationToken cancellationToken)
+        [MessageTimeout(300)]
+        public async Task Handle(TriggerRssFetchCommand _, CancellationToken cancellationToken)
         {
             _logger.LogInformation("Rozpoczeto sprawdzanie feedow RSS.");
             var sources = await _uow.Repository<NewsSource>().Query()
@@ -49,9 +55,8 @@ namespace SyntInfo.Application.CQRS.Handlers
             {
                 try
                 {
-                    // Używamy HttpClient z User-Agent, aby uniknąć blokowania przez niektóre serwisy (np. Reuters)
                     var client = _httpClientFactory.CreateClient();
-                    client.Timeout = TimeSpan.FromSeconds(30); 
+                    client.Timeout = TimeSpan.FromSeconds(30);
                     client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
                     var response = await client.GetAsync(source.RssUrl, cancellationToken);
@@ -67,17 +72,15 @@ namespace SyntInfo.Application.CQRS.Handlers
                     var rssContent = await response.Content.ReadAsStringAsync(cancellationToken);
                     var feed = FeedReader.ReadFromString(rssContent);
 
-                    foreach (var item in feed.Items.Take(10))
+                    foreach (var item in feed.Items.Take(20)) // Pobieramy z każdego źródła nowości bez sztucznych limitów
                     {
                         var url = item.Link;
-                        // Sprawdzenie czy w naszej bazie istnieje juz ten url we wczesniej przetworzonych linkach
                         var exists = await _uow.Repository<NewsArticle>().Query()
                             .AnyAsync(a => a.SourceUrls.Contains(url) || a.Title == item.Title, cancellationToken);
 
                         if (!exists)
                         {
                             var content = !string.IsNullOrWhiteSpace(item.Description) ? item.Description : item.Content;
-                            // Czasami feedy dają null, wezmy Title jezeli brak tresci.
                             if (string.IsNullOrWhiteSpace(content)) content = item.Title;
 
                             newArticlesToProcess.Add(new SummarizeArticleCommand(
@@ -102,54 +105,120 @@ namespace SyntInfo.Application.CQRS.Handlers
 
             await _uow.SaveChangesAsync(cancellationToken);
 
-            // Pobieramy limit z konfiguracji (domyślnie 5 jeśli brak zapisu)
-            var maxPerRegion = _configuration.GetValue<int>("ProcessingSettings:MaxArticlesPerRegion", 5);
+            var maxPerRegion = _configuration.GetValue("ProcessingSettings:MaxArticlesPerRegion", 10);
+            await ProcessRegionSelectionAsync(SourceRegion.World, newArticlesToProcess.Where(a => a.Region == SourceRegion.World).ToList(), maxPerRegion, cancellationToken);
+            await ProcessRegionSelectionAsync(SourceRegion.Poland, newArticlesToProcess.Where(a => a.Region == SourceRegion.Poland).ToList(), maxPerRegion, cancellationToken);
 
-            // Mechanizm "prostego kolejkowania" / paczkowania - osobno dla regionów
-            var polandBatch = newArticlesToProcess
-                .Where(a => a.Region == SourceRegion.Poland)
-                .OrderByDescending(a => a.PublishedAt)
-                .Take(maxPerRegion)
-                .ToList();
+        }
 
-            var worldBatch = newArticlesToProcess
-                .Where(a => a.Region == SourceRegion.World)
-                .OrderByDescending(a => a.PublishedAt)
-                .Take(maxPerRegion)
-                .ToList();
-
-            var batchToProcess = polandBatch.Concat(worldBatch).ToList();
-
-            _logger.LogInformation("Znaleziono {Count} nowych newsow. Przekazano {BatchCount} do LLM (PL: {PlCount}, World: {WorldCount}). Luimit per region: {Limit}",
-                newArticlesToProcess.Count, batchToProcess.Count, polandBatch.Count, worldBatch.Count, maxPerRegion);
-
-            foreach (var articleCmd in batchToProcess)
+        private async Task ProcessRegionSelectionAsync(SourceRegion region, List<SummarizeArticleCommand> newCandidates, int maxPerRegion, CancellationToken cancellationToken)
+        {
+            try
             {
-                // Publikacja na szynę. Zostanie asynchronicznie chwycone przez Handle(SummarizeArticleCommand)
-                await _bus.PublishAsync(articleCmd);
+                var cutoffDate = DateTime.UtcNow.AddHours(-24);
+                var oldActiveArticles = await _uow.Repository<NewsArticle>().Query()
+                    .Where(a => a.Region == region && a.IsActive && a.PublishedAt >= cutoffDate)
+                    .ToListAsync(cancellationToken);
+                if (newCandidates == null || !newCandidates.Any())
+                {
+                    return;
+                }
+
+                var selectionList = new List<object>();
+                int index = 0;
+
+                // Zabezpieczenie przed przepełnieniem okna LLM - bierzemy max 40 starych i 100 nowych z czołówki
+                var limitedOldArticles = oldActiveArticles.OrderByDescending(a => a.PublishedAt).Take(40).ToList();
+                var limitedNewCandidates = newCandidates.OrderByDescending(c => c.PublishedAt).Take(100).ToList();
+
+                // Mapowanie starych (jeszcze aktywnych, max z 24h)
+                foreach (var old in limitedOldArticles)
+                {
+                    var safeSummary = old.SummaryText ?? string.Empty;
+                    var safeContent = safeSummary.Length > 100 ? safeSummary.Substring(0, 100) + "..." : safeSummary;
+                    selectionList.Add(new { index = index++, title = old.Title, content = safeContent, type = "old", id = old.Id });
+                }
+                // Mapowanie nowych
+                var newStartIndex = index;
+                foreach (var cand in limitedNewCandidates)
+                {
+                    var safeCandContent = cand.Content ?? string.Empty;
+                    var safeContent = safeCandContent.Length > 100 ? safeCandContent.Substring(0, 100) + "..." : safeCandContent;
+                    selectionList.Add(new { index = index++, title = cand.Title, content = safeContent, type = "new" });
+                }
+
+                if (selectionList.Count <= maxPerRegion)
+                {
+                    foreach (var cand in limitedNewCandidates)
+                    {
+                        await _bus.InvokeAsync(cand, cancellationToken);
+                    }
+                    return;
+                }
+
+                var jsonStr = JsonSerializer.Serialize(selectionList);
+                var selectedIndexes = await _llmClient.SelectTopArticlesIndexesAsync(jsonStr, maxPerRegion, cancellationToken);
+
+                if (selectedIndexes == null || !selectedIndexes.Any())
+                {
+                    foreach (var cand in limitedNewCandidates.Take(maxPerRegion)) await _bus.PublishAsync(cand);
+                    return;
+                }
+
+                // Przetwarzanie i rotacja
+                var selectedOldIds = new HashSet<Guid>();
+                foreach (var i in selectedIndexes)
+                {
+                    if (i < newStartIndex && i >= 0 && i < selectionList.Count)
+                    {
+                        var idObj = ((dynamic)selectionList[i]).id;
+                        if (idObj != null) selectedOldIds.Add(idObj);
+                    }
+                    else if (i >= newStartIndex && i < selectionList.Count)
+                    {
+                        var cand = limitedNewCandidates[i - newStartIndex];
+                        await _bus.InvokeAsync(cand, cancellationToken);
+                    }
+                }
+
+                // Dezaktywacja starych artykułów, które nie dostały się do Top 10
+                var toDeactivate = oldActiveArticles.Where(a => !selectedOldIds.Contains(a.Id)).ToList();
+
+                foreach (var a in toDeactivate)
+                {
+                    a.IsActive = false;
+                    _uow.Repository<NewsArticle>().Update(a);
+                }
+
+                if (toDeactivate.Any())
+                {
+                    await _uow.SaveChangesAsync(cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Wystąpił błąd krytyczny w ProcessRegionSelectionAsync dla regionu {Region}", region);
+                throw;
             }
         }
 
         public async Task Handle(SummarizeArticleCommand command, CancellationToken cancellationToken)
         {
-            // Tworzymy bezpieczny token (10 minut), ignorując krótki timeout Wolverine
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
             var safeToken = cts.Token;
 
             await _aiSemaphore.WaitAsync(safeToken);
             try
             {
-                _logger.LogInformation("Przetwarzanie (LLM) dla {Title}", command.Title);
+                var searchResults = await _searchService.SearchDetailedInfoAsync(command.Title, safeToken);
+                var aiResponseRaw = await _llmClient.GenerateEnrichedSummaryAsync(command.Content, searchResults, safeToken);
 
-                var aiResponseRaw = await _llmClient.GenerateSummaryAsync(command.Content, safeToken);
-                
-                // Agresywne czyszczenie odpowiedzi LLM z bloków markdown ```json lub ```
                 var cleanedResponse = aiResponseRaw.Trim();
                 if (cleanedResponse.Contains("```"))
                 {
                     int firstCodeBlock = cleanedResponse.IndexOf("```");
                     int lastCodeBlock = cleanedResponse.LastIndexOf("```");
-                    
+
                     if (firstCodeBlock != lastCodeBlock && firstCodeBlock >= 0)
                     {
                         var sub = cleanedResponse.Substring(firstCodeBlock + 3, lastCodeBlock - firstCodeBlock - 3).Trim();
@@ -160,13 +229,9 @@ namespace SyntInfo.Application.CQRS.Handlers
 
                 var aiResponseJson = cleanedResponse;
 
-                // Naprawa typowych błędów LLM: konkatenacja stringów za pomocą '+'
-                // Przykład: "text" + \n " more text" -> "text more text"
                 if (aiResponseJson.Contains("\" +"))
                 {
-                    // Prosta próba naprawy przez usunięcie wzorca: " + (opcjonalny whitespace) "
                     aiResponseJson = System.Text.RegularExpressions.Regex.Replace(aiResponseJson, @"\""\s*\+\s*\n?\s*\""", "");
-                    _logger.LogInformation("Naprawiono konkatenację stringów w JSON.");
                 }
 
                 var firstBrace = aiResponseJson.IndexOf('{');
@@ -193,8 +258,8 @@ namespace SyntInfo.Application.CQRS.Handlers
 
                 try
                 {
-                    var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var structuredContent = System.Text.Json.JsonSerializer.Deserialize<SyntInfo.Application.Models.Llm.InfopigulaContent>(aiResponseJson, options);
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var structuredContent = JsonSerializer.Deserialize<SyntInfo.Application.Models.Llm.InfopigulaContent>(aiResponseJson, options);
 
                     if (structuredContent != null && !string.IsNullOrWhiteSpace(structuredContent.Title))
                     {
@@ -204,14 +269,12 @@ namespace SyntInfo.Application.CQRS.Handlers
                     }
                     else
                     {
-                        // Fallback – używamy wyciągniętego JSONa lub oczyszczonej odpowiedzi, jeśli nie udało się zdeserializować poprawnie
                         essence = aiResponseJson.Length > 4500 ? aiResponseJson.Substring(0, 4500) : aiResponseJson;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Błąd parsowania JSON z LLM. Użycie danych surowych (oczyszczonych). Raw: {Raw}", aiResponseRaw);
-                    // Fallback – używamy wyciągniętego JSONa jako tekstu
+                    _logger.LogWarning(ex, "Błąd parsowania JSON z LLM. Raw: {Raw}", aiResponseRaw);
                     essence = aiResponseJson.Length > 4500 ? aiResponseJson.Substring(0, 4500) : aiResponseJson;
                 }
 
@@ -236,7 +299,9 @@ namespace SyntInfo.Application.CQRS.Handlers
                     SourceUrls = new List<string> { command.Url },
                     Region = command.Region,
                     CategoryId = category.Id,
-                    Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null
+                    Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null,
+                    IsActive = true, // Od razu ustawiane jako aktywne
+                    DeepContent = searchResults // Zapisujemy wyniki Deep Search
                 };
 
                 await _uow.Repository<NewsArticle>().AddAsync(article, safeToken);
@@ -253,20 +318,14 @@ namespace SyntInfo.Application.CQRS.Handlers
         public async Task Handle(ClearAllArticlesCommand command, CancellationToken cancellationToken)
         {
             _logger.LogInformation("Rozpoczęto czyszczenie bazy danych z wiadomości.");
-
-            // Usuwamy wszystkie artykuły
             await _uow.Repository<NewsArticle>().Query().ExecuteDeleteAsync(cancellationToken);
-
-            // Resetujemy datę ostatniego pobrania dla wszystkich źródeł, aby mogły pobrać wszystko na nowo
             var sources = await _uow.Repository<NewsSource>().Query().ToListAsync(cancellationToken);
             foreach (var source in sources)
             {
                 source.LastFetchedAt = DateTime.MinValue;
                 _uow.Repository<NewsSource>().Update(source);
             }
-
             await _uow.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Baza danych została wyczyszczona z wiadomości.");
         }
     }
 }

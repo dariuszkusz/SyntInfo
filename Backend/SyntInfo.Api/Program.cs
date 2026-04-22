@@ -3,9 +3,6 @@ using Quartz;
 using SyntInfo.Infrastructure.Persistence;
 using SyntInfo.Application.Interfaces;
 using SyntInfo.Domain.Interfaces;
-using SyntInfo.Application.CQRS.Queries;
-using SyntInfo.Application.CQRS.Handlers;
-using System.Collections.Generic;
 using Wolverine;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,7 +15,7 @@ builder.Host.UseWolverine(opts =>
 // Add services to the container.
 // PWA API: Baza Danych PostgreSQL z rozszerzeniem pgvector
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), 
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
         o => o.UseVector().EnableRetryOnFailure()));
 
 
@@ -29,10 +26,11 @@ builder.Services.AddSwaggerGen();
 
 // Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<ISearchService, SyntInfo.Infrastructure.Services.MockSearchService>();
 builder.Services.AddHttpClient();
 
 // Rejestracja klienta LLM
-builder.Services.AddHttpClient<SyntInfo.Application.Interfaces.ILlmClient, SyntInfo.Infrastructure.Services.LocalLlmClient>(client =>
+builder.Services.AddHttpClient<ILlmClient, SyntInfo.Infrastructure.Services.LocalLlmClient>(client =>
 {
     var llmUrl = builder.Configuration["Llm:BaseUrl"] ?? "http://localhost:11434/";
     client.BaseAddress = new Uri(llmUrl);
@@ -67,6 +65,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Seed database
-await SyntInfo.Infrastructure.Persistence.DataSeeder.SeedAsync(app.Services);
+await DataSeeder.SeedAsync(app.Services);
 
 app.Run();
