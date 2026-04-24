@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using SyntInfo.Application.Interfaces;
 using SyntInfo.Application.CQRS.Queries;
+using SyntInfo.Application.DTOs;
 using SyntInfo.Domain.Entities;
 using SyntInfo.Domain.Interfaces;
 

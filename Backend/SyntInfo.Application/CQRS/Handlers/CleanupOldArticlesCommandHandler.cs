@@ -1,7 +1,3 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SyntInfo.Application.CQRS.Commands;
@@ -24,7 +20,7 @@ namespace SyntInfo.Application.CQRS.Handlers
         public async Task Handle(CleanupOldArticlesCommand command, CancellationToken cancellationToken)
         {
             var cutoffDate = DateTime.UtcNow.AddDays(-command.DaysToKeep);
-            
+
             _logger.LogInformation("Rozpoczynanie oczyszczania bazy danych (newsy starsze niż {Date})", cutoffDate);
 
             var oldArticles = await _uow.Repository<NewsArticle>().Query()
@@ -37,7 +33,7 @@ namespace SyntInfo.Application.CQRS.Handlers
                 {
                     _uow.Repository<NewsArticle>().Delete(article);
                 }
-                
+
                 await _uow.SaveChangesAsync(cancellationToken);
                 _logger.LogInformation("Usunięto {Count} starych artykułów.", oldArticles.Count);
             }

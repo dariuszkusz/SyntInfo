@@ -1,10 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using SyntInfo.Application.CQRS.Queries;
 using SyntInfo.Application.CQRS.Commands;
-using SyntInfo.Application.Interfaces;
+using SyntInfo.Application.DTOs;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-
 using Wolverine;
 
 namespace SyntInfo.Api.Controllers
@@ -31,17 +30,8 @@ namespace SyntInfo.Api.Controllers
         [HttpGet("top")]
         public async Task<ActionResult<TopNewsResponse>> GetTopNews()
         {
-            var polandQuery = new GetNewsArticlesQuery(1, 10, SyntInfo.Domain.Entities.SourceRegion.Poland);
-            var worldQuery = new GetNewsArticlesQuery(1, 10, SyntInfo.Domain.Entities.SourceRegion.World);
-
-            var polandNews = await _bus.InvokeAsync<List<NewsArticleDto>>(polandQuery, HttpContext.RequestAborted);
-            var worldNews = await _bus.InvokeAsync<List<NewsArticleDto>>(worldQuery, HttpContext.RequestAborted);
-
-            return Ok(new TopNewsResponse
-            {
-                Poland = polandNews,
-                World = worldNews
-            });
+            var result = await _bus.InvokeAsync<TopNewsResponse>(new GetTopNewsQuery(), HttpContext.RequestAborted);
+            return Ok(result);
         }
 
         [HttpPost("sync")]
@@ -50,7 +40,7 @@ namespace SyntInfo.Api.Controllers
             // Wyzwalamy procesy tła ręcznie
             await _bus.PublishAsync(new TriggerRssFetchCommand());
             await _bus.PublishAsync(new CleanupOldArticlesCommand(DaysToKeep: 7));
-            
+
             return Accepted(new { Message = "Ręczna synchronizacja uruchomiona." });
         }
 
@@ -60,11 +50,5 @@ namespace SyntInfo.Api.Controllers
             await _bus.PublishAsync(new ClearAllArticlesCommand());
             return Ok(new { Message = "Baza danych została wyczyszczona." });
         }
-    }
-
-    public class TopNewsResponse
-    {
-        public List<NewsArticleDto> Poland { get; set; } = new();
-        public List<NewsArticleDto> World { get; set; } = new();
     }
 }

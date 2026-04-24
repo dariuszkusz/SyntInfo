@@ -1,23 +1,9 @@
-using System;
-using System.Collections.Generic;
-using SyntInfo.Application.Interfaces;
+using SyntInfo.Domain.Entities;
 
 namespace SyntInfo.Application.CQRS.Queries
 {
-    public class NewsArticleDto
-    {
-        public Guid Id { get; set; }
-        public string Title { get; set; } = string.Empty;
-        public string OriginalTitle { get; set; } = string.Empty;
-        public string SummaryText { get; set; } = string.Empty;
-        public DateTime PublishedAt { get; set; }
-        public List<string> SourceUrls { get; set; } = new();
-        public string CategoryName { get; set; } = string.Empty;
-        public SyntInfo.Domain.Entities.SourceRegion Region { get; set; }
-    }
-
     public record GetNewsArticlesQuery(
-        int Page = 1, 
-        int PageSize = 20, 
-        SyntInfo.Domain.Entities.SourceRegion? Region = null);
+        int Page = 1,
+        int PageSize = 20,
+        SourceRegion? Region = null);
 }
