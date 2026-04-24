@@ -20,4 +20,7 @@ public class NewsArticle
     public NewsCategory? Category { get; set; }
     
     public SourceRegion Region { get; set; }
+
+    public bool IsActive { get; set; } = true;
+    public string? DeepContent { get; set; }
 }
