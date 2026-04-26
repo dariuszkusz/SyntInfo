@@ -26,7 +26,7 @@ builder.Services.AddSwaggerGen();
 
 // Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-builder.Services.AddScoped<ISearchService, SyntInfo.Infrastructure.Services.MockSearchService>();
+builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.TavilySearchService>();
 builder.Services.AddHttpClient();
 
 // Rejestracja klienta LLM

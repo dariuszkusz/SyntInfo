@@ -41,6 +41,24 @@ namespace SyntInfo.Application.CQRS.Handlers
         public async Task Handle(TriggerRssFetchCommand _, CancellationToken cancellationToken)
         {
             _logger.LogInformation("Rozpoczęto sprawdzanie feedów RSS.");
+
+            // Dezaktywacja artykułów starszych niż 24h (naprawa wycieku statusu IsActive)
+            var expiredCutoff = DateTime.UtcNow.AddHours(-24);
+            var expiredArticles = await _uow.Repository<NewsArticle>().Query()
+                .Where(a => a.IsActive && a.PublishedAt < expiredCutoff)
+                .ToListAsync(cancellationToken);
+
+            if (expiredArticles.Any())
+            {
+                _logger.LogInformation("Dezaktywacja {Count} przestarzałych artykułów.", expiredArticles.Count);
+                foreach (var article in expiredArticles)
+                {
+                    article.IsActive = false;
+                    _uow.Repository<NewsArticle>().Update(article);
+                }
+                await _uow.SaveChangesAsync(cancellationToken);
+            }
+
             var sources = await _uow.Repository<NewsSource>().Query()
                 .Where(s => s.IsActive)
                 .ToListAsync(cancellationToken);

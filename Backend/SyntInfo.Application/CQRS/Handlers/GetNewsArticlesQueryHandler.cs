@@ -19,7 +19,7 @@ namespace SyntInfo.Application.CQRS.Handlers
         {
             var cutoffDate = DateTime.UtcNow.AddHours(-24);
             var dbQuery = _uow.Repository<NewsArticle>().Query()
-                .Where(a => a.PublishedAt >= cutoffDate);
+                .Where(a => a.IsActive && a.PublishedAt >= cutoffDate);
 
             if (query.Region.HasValue)
             {
