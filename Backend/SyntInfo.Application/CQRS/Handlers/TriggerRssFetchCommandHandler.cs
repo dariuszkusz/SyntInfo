@@ -16,7 +16,7 @@ namespace SyntInfo.Application.CQRS.Handlers
     {
         private readonly IUnitOfWork _uow;
         private readonly IMessageBus _bus;
-        private readonly ILlmClient _llmClient;
+        private readonly IOpenRouterClient _openRouterClient;
         private readonly ILogger<TriggerRssFetchCommandHandler> _logger;
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
@@ -24,25 +24,25 @@ namespace SyntInfo.Application.CQRS.Handlers
         public TriggerRssFetchCommandHandler(
             IUnitOfWork uow,
             IMessageBus bus,
-            ILlmClient llmClient,
+            IOpenRouterClient openRouterClient,
             ILogger<TriggerRssFetchCommandHandler> logger,
             IConfiguration configuration,
             IHttpClientFactory httpClientFactory)
         {
             _uow = uow;
             _bus = bus;
-            _llmClient = llmClient;
+            _openRouterClient = openRouterClient;
             _logger = logger;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
         }
 
-        [MessageTimeout(300)]
+        [MessageTimeout(600)]
         public async Task Handle(TriggerRssFetchCommand _, CancellationToken cancellationToken)
         {
             _logger.LogInformation("Rozpoczęto sprawdzanie feedów RSS.");
 
-            // Dezaktywacja artykułów starszych niż 24h (naprawa wycieku statusu IsActive)
+            // Dezaktywacja artykułów starszych niż 24h
             var expiredCutoff = DateTime.UtcNow.AddHours(-24);
             var expiredArticles = await _uow.Repository<NewsArticle>().Query()
                 .Where(a => a.IsActive && a.PublishedAt < expiredCutoff)
@@ -120,12 +120,24 @@ namespace SyntInfo.Application.CQRS.Handlers
             await _uow.SaveChangesAsync(cancellationToken);
 
             var maxPerRegion = _configuration.GetValue("ProcessingSettings:MaxArticlesPerRegion", 10);
-            await ProcessRegionSelectionAsync(SourceRegion.World, newArticlesToProcess.Where(a => a.Region == SourceRegion.World).ToList(), maxPerRegion, cancellationToken);
-            await ProcessRegionSelectionAsync(SourceRegion.Poland, newArticlesToProcess.Where(a => a.Region == SourceRegion.Poland).ToList(), maxPerRegion, cancellationToken);
+            
+            var allCommands = new List<SummarizeArticleCommand>();
+            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.World, newArticlesToProcess.Where(a => a.Region == SourceRegion.World).ToList(), maxPerRegion, cancellationToken));
+            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.Poland, newArticlesToProcess.Where(a => a.Region == SourceRegion.Poland).ToList(), maxPerRegion, cancellationToken));
+
+            if (allCommands.Any())
+            {
+
+                foreach (var cmd in allCommands)
+                {
+                    await _bus.InvokeAsync(cmd, cancellationToken);
+                }
+            }
         }
 
-        private async Task ProcessRegionSelectionAsync(SourceRegion region, List<SummarizeArticleCommand> newCandidates, int maxPerRegion, CancellationToken cancellationToken)
+        private async Task<List<SummarizeArticleCommand>> GetCommandsToExecuteAsync(SourceRegion region, List<SummarizeArticleCommand> newCandidates, int maxPerRegion, CancellationToken cancellationToken)
         {
+            var commandsToExecute = new List<SummarizeArticleCommand>();
             try
             {
                 var cutoffDate = DateTime.UtcNow.AddHours(-24);
@@ -135,80 +147,54 @@ namespace SyntInfo.Application.CQRS.Handlers
 
                 if (newCandidates == null || !newCandidates.Any())
                 {
-                    return;
+                    return commandsToExecute;
                 }
+
+                var limitedOldArticles = oldActiveArticles.OrderByDescending(a => a.PublishedAt).Take(20).ToList();
+                var limitedNewCandidates = newCandidates.OrderByDescending(c => c.PublishedAt).Take(50).ToList();
 
                 var selectionList = new List<object>();
-                int index = 0;
-
-                var limitedOldArticles = oldActiveArticles.OrderByDescending(a => a.PublishedAt).Take(40).ToList();
-                var limitedNewCandidates = newCandidates.OrderByDescending(c => c.PublishedAt).Take(100).ToList();
-
                 foreach (var old in limitedOldArticles)
                 {
-                    var safeSummary = old.SummaryText ?? string.Empty;
-                    var safeContent = safeSummary.Length > 100 ? safeSummary.Substring(0, 100) + "..." : safeSummary;
-                    selectionList.Add(new { index = index++, title = old.Title, content = safeContent, type = "old", id = old.Id });
+                    selectionList.Add(new { index = selectionList.Count, title = old.Title, type = "old" });
                 }
-
-                var newStartIndex = index;
+                int newStartIndex = selectionList.Count;
                 foreach (var cand in limitedNewCandidates)
                 {
-                    var safeCandContent = cand.Content ?? string.Empty;
-                    var safeContent = safeCandContent.Length > 100 ? safeCandContent.Substring(0, 100) + "..." : safeCandContent;
-                    selectionList.Add(new { index = index++, title = cand.Title, content = safeContent, type = "new" });
+                    selectionList.Add(new { index = selectionList.Count, title = cand.Title, type = "new" });
                 }
 
                 if (selectionList.Count <= maxPerRegion)
                 {
-                    foreach (var cand in limitedNewCandidates)
-                    {
-                        await _bus.InvokeAsync(cand, cancellationToken);
-                    }
-                    return;
+                    commandsToExecute.AddRange(limitedNewCandidates);
+                    return commandsToExecute;
                 }
 
                 var jsonStr = JsonSerializer.Serialize(selectionList);
-                var selectedIndexes = await _llmClient.SelectTopArticlesIndexesAsync(jsonStr, maxPerRegion, cancellationToken);
+                var prompt = $"Analizujesz newsy dla regionu {region}. Z poniższej listy JSON wybierz DOKŁADNIE {maxPerRegion} najważniejszych newsów. Zwróć tylko tablicę numerów index, np. [1, 5, 12].\n\n{jsonStr}";
+                
+                var selectedIndexes = await _openRouterClient.SelectTopArticlesIndexesAsync(prompt, maxPerRegion, cancellationToken);
 
                 if (selectedIndexes == null || !selectedIndexes.Any())
                 {
-                    foreach (var cand in limitedNewCandidates.Take(maxPerRegion)) await _bus.PublishAsync(cand);
-                    return;
+                    commandsToExecute.AddRange(limitedNewCandidates.Take(maxPerRegion));
+                    return commandsToExecute;
                 }
 
-                var selectedOldIds = new HashSet<Guid>();
                 foreach (var i in selectedIndexes)
                 {
-                    if (i < newStartIndex && i >= 0 && i < selectionList.Count)
+                    if (i >= newStartIndex && i < selectionList.Count)
                     {
-                        var idObj = ((dynamic)selectionList[i]).id;
-                        if (idObj != null) selectedOldIds.Add(idObj);
-                    }
-                    else if (i >= newStartIndex && i < selectionList.Count)
-                    {
-                        var cand = limitedNewCandidates[i - newStartIndex];
-                        await _bus.InvokeAsync(cand, cancellationToken);
+                        commandsToExecute.Add(limitedNewCandidates[i - newStartIndex]);
                     }
                 }
-
-                var toDeactivate = oldActiveArticles.Where(a => !selectedOldIds.Contains(a.Id)).ToList();
-
-                foreach (var a in toDeactivate)
-                {
-                    a.IsActive = false;
-                    _uow.Repository<NewsArticle>().Update(a);
-                }
-
-                if (toDeactivate.Any())
-                {
-                    await _uow.SaveChangesAsync(cancellationToken);
-                }
+                
+                return commandsToExecute;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Wystąpił błąd krytyczny w ProcessRegionSelectionAsync dla regionu {Region}", region);
-                throw;
+                _logger.LogError(ex, "Błąd w GetCommandsToExecuteAsync dla regionu {Region}", region);
+                return commandsToExecute;
             }
         }
     }

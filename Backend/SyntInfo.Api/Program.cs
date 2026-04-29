@@ -1,15 +1,28 @@
 using Microsoft.EntityFrameworkCore;
 using Quartz;
+using Serilog;
 using SyntInfo.Infrastructure.Persistence;
 using SyntInfo.Application.Interfaces;
 using SyntInfo.Domain.Interfaces;
 using Wolverine;
 
-var builder = WebApplication.CreateBuilder(args);
-builder.Host.UseWolverine(opts =>
+
+try
 {
-    opts.Discovery.IncludeAssembly(typeof(SyntInfo.Application.CQRS.Handlers.GetNewsArticlesQueryHandler).Assembly);
-});
+    var builder = WebApplication.CreateBuilder(args);
+
+    // Konfiguracja Serilog z appsettings.json
+    Log.Logger = new LoggerConfiguration()
+        .ReadFrom.Configuration(builder.Configuration)
+        .CreateLogger();
+
+    Log.Information("!!! SYNTINFO STARTING !!!");
+    builder.Host.UseSerilog();
+
+    builder.Host.UseWolverine(opts =>
+    {
+        opts.Discovery.IncludeAssembly(typeof(SyntInfo.Application.CQRS.Handlers.GetNewsArticlesQueryHandler).Assembly);
+    });
 
 
 // Add services to the container.
@@ -23,18 +36,29 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular", policy =>
+    {
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
 
 // Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.TavilySearchService>();
+builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.TavilySearchService>(client => 
+{
+    client.Timeout = TimeSpan.FromMinutes(10);
+});
 builder.Services.AddHttpClient();
 
-// Rejestracja klienta LLM
-builder.Services.AddHttpClient<ILlmClient, SyntInfo.Infrastructure.Services.LocalLlmClient>(client =>
+builder.Services.AddHttpClient<IOpenRouterClient, SyntInfo.Infrastructure.Services.OpenRouterClient>(client =>
 {
-    var llmUrl = builder.Configuration["Llm:BaseUrl"] ?? "http://localhost:11434/";
-    client.BaseAddress = new Uri(llmUrl);
-    client.Timeout = TimeSpan.FromMinutes(5); // Zwiększony timeout dla lokalnego modelu LLM
+    client.BaseAddress = new Uri(builder.Configuration["OpenRouter:BaseUrl"] ?? "https://openrouter.ai/api/v1/");
+    client.Timeout = TimeSpan.FromMinutes(10);
 });
 
 // Konfiguracja zadań w tle (Quartz)
@@ -61,10 +85,20 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("AllowAngular");
 app.UseAuthorization();
 app.MapControllers();
 
-// Seed database
-await DataSeeder.SeedAsync(app.Services);
+    // Seed database
+    await DataSeeder.SeedAsync(app.Services);
 
-app.Run();
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Aplikacja zakończyła się niepowodzeniem");
+}
+finally
+{
+    Log.CloseAndFlush();
+}

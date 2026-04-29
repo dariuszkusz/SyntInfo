@@ -24,6 +24,12 @@
       },
       "sourceFileMap": {
         "/Views": "${workspaceFolder}/Views"
+      },
+      "console": "internalConsole",
+      "logging": {
+        "moduleLoad": false,
+        "programOutput": true,
+        "consoleUsageMessage": false
       }
     },
     {
