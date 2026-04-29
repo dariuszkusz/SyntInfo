@@ -27,10 +27,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Title).IsRequired().HasMaxLength(255);
             entity.Property(e => e.SummaryText).IsRequired().HasMaxLength(5000); // Zapas na fallback z LLM
             
-            // Konfiguracja wektora (wymiar 3072 dla Llama 3.2 lub wg potrzeb modelu)
-            // Llama 3.2 1B ma zazwyczaj 2048, 3B ma 3072. 
-            // Można też zostawić bez wymiaru jeśli model go definiuje dynamicznie.
-            entity.Property(e => e.Embedding).HasColumnType("vector(3072)"); 
+            // Konfiguracja wektora (wymiar 1536 dla OpenAI text-embedding-3-small via OpenRouter)
+            entity.Property(e => e.Embedding).HasColumnType("vector(1536)"); 
         });
 
         modelBuilder.Entity<NewsCategory>(entity =>
