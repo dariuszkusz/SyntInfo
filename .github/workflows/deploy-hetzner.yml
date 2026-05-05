@@ -1,8 +1,8 @@
-name: Deploy to Hetzner
+name: Deploy PROD
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
             echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
             echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> .env
             echo "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}" >> .env
-            
+
             # Restart containers and rebuild images
             docker compose down
             docker compose up -d --build
