@@ -1,0 +1,52 @@
+# === .NET (Backend) ===
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+Backend/*/bin/
+Backend/*/obj/
+Backend/SyntInfo.Api/appsettings.Development.json
+
+# === Angular (Frontend) ===
+frontend/dist/
+frontend/tmp/
+frontend/out-tsc/
+frontend/node_modules/
+frontend/.angular/cache/
+frontend/coverage/
+frontend/npm-debug.log
+frontend/yarn-error.log
+
+# === Capacitor / Mobile ===
+frontend/ios/App/App/public/
+frontend/android/app/src/main/assets/public/
+frontend/android/app/build/
+frontend/ios/App/build/
+
+# === IDEs & Editors ===
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+*.launch
+*.sublime-workspace
+
+# === Infrastructure / Docker ===
+Infrastructure/pgdata/
+
+# === System Files ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Antigravity / MCP ===
+.gemini/
+.antigravityignore
+**/mcp.json
+**/brain/
