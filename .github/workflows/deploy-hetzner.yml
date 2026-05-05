@@ -1,8 +1,8 @@
-name: Deploy to Hetzner
+name: Deploy PROD
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -16,8 +16,8 @@ jobs:
         run: |
           # Remove files we don't want to deploy
           rm -rf .git .github node_modules frontend/node_modules Backend/obj Backend/bin frontend/dist cypress
-          # Create a tar archive of the project
-          tar -czf deploy.tar.gz .
+          # Create a tar archive of the project, excluding the archive itself
+          tar --exclude=deploy.tar.gz -czf deploy.tar.gz .
 
       - name: Copy archive to server via SCP
         uses: appleboy/scp-action@v0.1.7
@@ -44,7 +44,7 @@ jobs:
             echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
             echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> .env
             echo "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}" >> .env
-            
+
             # Restart containers and rebuild images
             docker compose down
             docker compose up -d --build
