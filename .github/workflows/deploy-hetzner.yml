@@ -16,8 +16,9 @@ jobs:
         run: |
           # Remove files we don't want to deploy
           rm -rf .git .github node_modules frontend/node_modules Backend/obj Backend/bin frontend/dist cypress
-          # Create a tar archive of the project, excluding the archive itself
-          tar --exclude=deploy.tar.gz -czf deploy.tar.gz .
+          # Create a tar archive in /tmp to avoid "file changed as we read it" error
+          tar -czf /tmp/deploy.tar.gz .
+          mv /tmp/deploy.tar.gz .
 
       - name: Copy archive to server via SCP
         uses: appleboy/scp-action@v0.1.7
