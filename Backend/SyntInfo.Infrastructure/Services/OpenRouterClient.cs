@@ -173,6 +173,11 @@ namespace SyntInfo.Infrastructure.Services
 
                 return content;
             }
+            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogError("Timeout podczas zapytania do OpenRouter (Model: {Model}). Serwer nie odpowiedział w terminie.", model);
+                throw new Exception($"OpenRouter Timeout for model {model}", ex);
+            }
             finally
             {
                 _rateLimiter.Release();

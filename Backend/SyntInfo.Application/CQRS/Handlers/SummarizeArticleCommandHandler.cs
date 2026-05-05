@@ -6,6 +6,7 @@ using SyntInfo.Application.Interfaces;
 using SyntInfo.Application.Models.Llm;
 using SyntInfo.Domain.Entities;
 using SyntInfo.Domain.Interfaces;
+using Wolverine.Attributes;
 
 namespace SyntInfo.Application.CQRS.Handlers
 {
@@ -29,9 +30,10 @@ namespace SyntInfo.Application.CQRS.Handlers
             _logger = logger;
         }
 
+        [MessageTimeout(900)] // 15 minut na jeden artykuł (ważne dla modeli reasoning)
         public async Task Handle(SummarizeArticleCommand command, CancellationToken cancellationToken)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(15));
             var safeToken = cts.Token;
 
             await _aiSemaphore.WaitAsync(safeToken);
