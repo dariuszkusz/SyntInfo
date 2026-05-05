@@ -1,0 +1,70 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: syntinfo_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-synt_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synt_password}
+      POSTGRES_DB: ${POSTGRES_DB:-syntinfo_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - synt_net
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: syntinfo_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@syntinfo.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin_password}
+    ports:
+      - "5050:80"
+    restart: always
+    networks:
+      - synt_net
+
+  api:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: syntinfo_api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${POSTGRES_DB:-syntinfo_db};Username=${POSTGRES_USER:-synt_user};Password=${POSTGRES_PASSWORD:-synt_password}
+      - OpenRouter__ApiKey=${OPENROUTER_API_KEY}
+    depends_on:
+      - db
+    networks:
+      - synt_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: syntinfo_frontend
+    restart: always
+    networks:
+      - synt_net
+
+  proxy:
+    image: nginx:alpine
+    container_name: syntinfo_proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - frontend
+    restart: always
+    networks:
+      - synt_net
+
+networks:
+  synt_net:
+    driver: bridge
+
+volumes:
+  pgdata:

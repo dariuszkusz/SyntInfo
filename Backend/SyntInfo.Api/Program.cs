@@ -89,6 +89,13 @@ app.UseCors("AllowAngular");
 app.UseAuthorization();
 app.MapControllers();
 
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Log.Information("Applying database migrations...");
+        db.Database.Migrate();
+    }
+
     // Seed database
     await DataSeeder.SeedAsync(app.Services);
 
