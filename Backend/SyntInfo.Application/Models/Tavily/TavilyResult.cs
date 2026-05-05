@@ -1,4 +1,4 @@
-namespace SyntInfo.Infrastructure.Models.Tavily
+namespace SyntInfo.Application.Models.Tavily
 {
     public class TavilyResult
     {

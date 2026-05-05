@@ -2,7 +2,7 @@ using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SyntInfo.Application.Interfaces;
-using SyntInfo.Infrastructure.Models.Tavily;
+using SyntInfo.Application.Models.Tavily;
 
 namespace SyntInfo.Infrastructure.Services
 {
