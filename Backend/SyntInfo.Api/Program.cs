@@ -53,11 +53,20 @@ builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.
 {
     client.Timeout = TimeSpan.FromMinutes(10);
 });
-builder.Services.AddHttpClient();
+builder.Services.AddHttpClient(string.Empty)
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = true
+    });
 
 builder.Services.AddHttpClient<IOpenRouterClient, SyntInfo.Infrastructure.Services.OpenRouterClient>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["OpenRouter:BaseUrl"] ?? "https://openrouter.ai/api/v1/");
+    client.Timeout = TimeSpan.FromMinutes(10);
+});
+
+builder.Services.AddHttpClient<IGoogleAiStudioClient, SyntInfo.Infrastructure.Services.GoogleAiStudioClient>(client =>
+{
     client.Timeout = TimeSpan.FromMinutes(10);
 });
 
