@@ -14,6 +14,7 @@ namespace SyntInfo.Infrastructure.Services
         private readonly string _apiKey;
         private readonly string _analystModel;
         private readonly string _editorModel;
+        private readonly string _fallbackModel;
 
         // Rate limiting for :free models
         private static readonly SemaphoreSlim _rateLimiter = new SemaphoreSlim(1, 1);
@@ -27,6 +28,7 @@ namespace SyntInfo.Infrastructure.Services
             _apiKey = configuration["OpenRouter:ApiKey"] ?? string.Empty;
             _analystModel = configuration["OpenRouter:AnalystModel"] ?? "qwen/qwen-2.5-72b-instruct:free";
             _editorModel = configuration["OpenRouter:EditorModel"] ?? "mistralai/mistral-small-24b-instruct-2501:free";
+            _fallbackModel = configuration["OpenRouter:FallbackModel"] ?? "google/gemini-2.0-flash-lite-preview-02-05:free";
 
             var baseUrl = configuration["OpenRouter:BaseUrl"] ?? "https://openrouter.ai/api/v1/";
             if (!baseUrl.EndsWith("/")) baseUrl += "/";
@@ -100,28 +102,49 @@ namespace SyntInfo.Infrastructure.Services
 
         private async Task<string> CallOpenRouterWithRetryAsync(string model, string systemPrompt, string userPrompt, bool forceJson, CancellationToken cancellationToken)
         {
-            int maxRetries = 5;
-            int delayMs = 15000;
+            int maxRetries = 3; // Reduced to 3 for primary model
+            int delayMs = 12000;
+            string currentModel = model;
 
             for (int i = 0; i <= maxRetries; i++)
             {
                 try
                 {
-                    return await CallOpenRouterAsync(model, systemPrompt, userPrompt, forceJson, cancellationToken);
+                    var response = await CallOpenRouterAsync(currentModel, systemPrompt, userPrompt, forceJson, cancellationToken);
+                    
+                    // Validacja JSON jesli wymuszony
+                    if (forceJson && string.IsNullOrWhiteSpace(response))
+                    {
+                        throw new Exception("Empty response from LLM when JSON was expected.");
+                    }
+
+                    return response;
                 }
-                catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests || ex.Message.Contains("429"))
+                catch (Exception ex)
                 {
+                    bool isRateLimit = ex is HttpRequestException hrex && hrex.StatusCode == System.Net.HttpStatusCode.TooManyRequests;
+                    bool isTimeout = ex.Message.Contains("Timeout") || ex is TaskCanceledException;
+                    
+                    _logger.LogWarning("Błąd modelu {Model} (Próba {Current}/{Max}): {Error}", currentModel, i + 1, maxRetries + 1, ex.Message);
+
+                    // Jesli to ostatnia proba lub powazny blad, a nie jestesmy jeszcze na fallbacku - przelacz na fallback
+                    if ((i >= 1 || isTimeout) && currentModel != _fallbackModel)
+                    {
+                        _logger.LogWarning("Przełączanie na model Fallback: {FallbackModel}", _fallbackModel);
+                        currentModel = _fallbackModel;
+                        i = 0; // Resetujemy licznik prob dla modelu fallback
+                        maxRetries = 2; // Mniej prob dla fallbacka
+                        continue;
+                    }
+
                     if (i == maxRetries) throw;
 
-                    // Sprawdzenie czy OpenRouter podał czas oczekiwania (Retry-After nie zawsze jest dostępny w darmowych modelach, ale warto go obsłużyć)
-                    _logger.LogWarning("Otrzymano 429 (TooManyRequests) z OpenRouter. Próba {Current}/{Max}. Zwiększam oczekiwanie...", i + 1, maxRetries);
-
                     await Task.Delay(delayMs, cancellationToken);
-                    delayMs *= 2; // Wykładnicze zwiększanie czasu (15s, 30s, 60s, 120s...)
+                    delayMs *= 2;
                 }
             }
 
-            throw new Exception("Nie udało się połączyć z OpenRouter po wielu próbach (429).");
+            throw new Exception($"Nie udało się uzyskać odpowiedzi z OpenRouter (Primary: {model}, Fallback: {_fallbackModel}).");
         }
 
         private async Task<string> CallOpenRouterAsync(string model, string systemPrompt, string userPrompt, bool forceJson, CancellationToken cancellationToken)
@@ -169,7 +192,14 @@ namespace SyntInfo.Infrastructure.Services
                 }
 
                 var result = await response.Content.ReadFromJsonAsync<OpenAIChatCompletionResponse>(cancellationToken: cancellationToken);
-                var content = result?.Choices?[0].Message.Content ?? string.Empty;
+                
+                if (result?.Choices == null || result.Choices.Count == 0)
+                {
+                    _logger.LogWarning("Model {Model} zwrócił pustą listę Choices.", model);
+                    return string.Empty;
+                }
+
+                var content = result.Choices[0].Message.Content ?? string.Empty;
 
                 return content;
             }
