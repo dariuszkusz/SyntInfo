@@ -14,6 +14,7 @@ namespace SyntInfo.Application.CQRS.Handlers
     {
         private readonly IUnitOfWork _uow;
         private readonly IOpenRouterClient _openRouterClient;
+        private readonly IGoogleAiStudioClient _googleAiStudioClient;
         private readonly ISearchService _searchService;
         private readonly ILogger<SummarizeArticleCommandHandler> _logger;
         private static readonly SemaphoreSlim _aiSemaphore = new SemaphoreSlim(1, 1);
@@ -21,11 +22,13 @@ namespace SyntInfo.Application.CQRS.Handlers
         public SummarizeArticleCommandHandler(
             IUnitOfWork uow,
             IOpenRouterClient openRouterClient,
+            IGoogleAiStudioClient googleAiStudioClient,
             ISearchService searchService,
             ILogger<SummarizeArticleCommandHandler> logger)
         {
             _uow = uow;
             _openRouterClient = openRouterClient;
+            _googleAiStudioClient = googleAiStudioClient;
             _searchService = searchService;
             _logger = logger;
         }
@@ -46,8 +49,8 @@ namespace SyntInfo.Application.CQRS.Handlers
                 var factsJsonRaw = await _openRouterClient.GenerateFactsAsync(command.Content, searchResults, safeToken);
                 var factsJson = CleanJsonResponse(factsJsonRaw);
 
-                // KROK 2: Redaktor (OpenRouter) - Minimalistyczne podsumowanie JSON (Tytuł, Esencja, Kategoria)
-                var editorResponseRaw = await _openRouterClient.GenerateSummaryFromFactsAsync(factsJson, safeToken);
+                // KROK 2: Redaktor (Google AI Studio z fallbackiem na OpenRouter) - Minimalistyczne podsumowanie JSON (Tytuł, Esencja, Kategoria)
+                var editorResponseRaw = await _googleAiStudioClient.GenerateSummaryFromFactsAsync(factsJson, safeToken);
                 var editorJson = CleanJsonResponse(editorResponseRaw);
 
                 string displayTitle = command.Title;

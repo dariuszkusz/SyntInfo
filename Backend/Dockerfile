@@ -17,6 +17,7 @@ RUN dotnet publish "SyntInfo.Api.csproj" -c Release -o /app/publish /p:UseAppHos
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
+RUN apt-get update && apt-get install -y libgssapi-krb5-2 && rm -rf /var/lib/apt/lists/*
 COPY --from=publish /app/publish .
 
 # Set environment variables
