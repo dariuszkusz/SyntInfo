@@ -24,6 +24,74 @@ namespace SyntInfo.Infrastructure.Services
             _modelName = configuration["GoogleAiStudio:Model"] ?? "gemini-1.5-flash-lite";
         }
 
+        public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, CancellationToken cancellationToken = default)
+        {
+            var systemPrompt = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, znaczeniem międzynarodowym/krajowym i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy.";
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(_apiKey) || _apiKey == "PLACEHOLDER_GOOGLE_KEY")
+                {
+                    return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, cancellationToken);
+                }
+
+                _logger.LogInformation("Krok 1: Wybór artykułów za pomocą Google AI Studio (Model: {Model})", _modelName);
+                
+                var responseContent = await CallGeminiAsync(systemPrompt, articlesListJson, true, cancellationToken);
+                
+                if (string.IsNullOrWhiteSpace(responseContent))
+                {
+                    return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, cancellationToken);
+                }
+
+                using var doc = JsonDocument.Parse(responseContent);
+                if (doc.RootElement.TryGetProperty("selectedIndexes", out var arrayEl))
+                {
+                    var list = new List<int>();
+                    foreach (var el in arrayEl.EnumerateArray())
+                    {
+                        if (el.TryGetInt32(out int val)) list.Add(val);
+                    }
+                    return list;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Błąd w GoogleAiStudioClient.SelectTopArticlesIndexesAsync. Przełączanie na OpenRouter.");
+                return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, cancellationToken);
+            }
+
+            return new List<int>();
+        }
+
+        public async Task<string> GenerateFactsAsync(string content, string searchContent, CancellationToken cancellationToken = default)
+        {
+            const string systemPrompt = "Jesteś ekspertem analizy danych i analitykiem informacji. Twoim zadaniem jest wyciągnięcie kluczowych faktów z dostarczonych materiałów (RSS i wyniki wyszukiwania).\n\n" +
+                                        "Zasady:\n" +
+                                        "1. Zidentyfikuj co najmniej 5-8 najważniejszych faktów.\n" +
+                                        "2. Wyeliminuj duplikaty i sprzeczne informacje.\n" +
+                                        "3. Zwroc dane WYŁĄCZNIE w formacie JSON jako tablicę obiektów: [{\"fact\": \"treść faktu\", \"source\": \"krótki opis źródła\"}].\n" +
+                                        "4. Nie dodawaj wstępu ani zakończenia.";
+
+            var userPrompt = $"[DANE Z ARTYKUŁU/RSS]:\n{content}\n\n[DANE Z WYSZUKIWARKI]:\n{searchContent}";
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(_apiKey) || _apiKey == "PLACEHOLDER_GOOGLE_KEY")
+                {
+                    return await _openRouterClient.GenerateFactsAsync(content, searchContent, cancellationToken);
+                }
+
+                _logger.LogInformation("Krok 1: Generowanie faktów za pomocą Google AI Studio (Model: {Model})", _modelName);
+                return await CallGeminiAsync(systemPrompt, userPrompt, true, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Błąd w GoogleAiStudioClient.GenerateFactsAsync. Przełączanie na OpenRouter.");
+                return await _openRouterClient.GenerateFactsAsync(content, searchContent, cancellationToken);
+            }
+        }
+
         public async Task<string> GenerateSummaryFromFactsAsync(string factsJson, CancellationToken cancellationToken = default)
         {
             const string systemPrompt = "Jesteś doświadczonym redaktorem i architektem informacji. Twoim zadaniem jest stworzenie minimalistycznego, treściwego podsumowania w języku polskim (tzw. Infopiguła) na podstawie listy faktów.\n\n" +
@@ -43,59 +111,7 @@ namespace SyntInfo.Infrastructure.Services
                 }
 
                 _logger.LogInformation("Krok 2: Generowanie podsumowania za pomocą Google AI Studio (Model: {Model})", _modelName);
-
-                var requestUri = $"{_baseUrl}/{_modelName}:generateContent?key={_apiKey}";
-
-                var payloadObject = new
-                {
-                    system_instruction = new
-                    {
-                        parts = new[] { new { text = systemPrompt } }
-                    },
-                    contents = new[]
-                    {
-                        new 
-                        { 
-                            role = "user",
-                            parts = new[] { new { text = factsJson } }
-                        }
-                    },
-                    generationConfig = new
-                    {
-                        temperature = 0.3,
-                        responseMimeType = "application/json"
-                    }
-                };
-
-                var response = await _httpClient.PostAsJsonAsync(requestUri, payloadObject, cancellationToken);
-
-                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                {
-                    _logger.LogWarning("Google AI Studio: Przekroczono limit zapytań (429 Too Many Requests). Przełączanie na OpenRouter.");
-                    return await _openRouterClient.GenerateSummaryFromFactsAsync(factsJson, cancellationToken);
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var error = await response.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogError("Błąd Google AI Studio API ({StatusCode}). Szczegóły: {Error}. Przełączanie na OpenRouter.", response.StatusCode, error);
-                    return await _openRouterClient.GenerateSummaryFromFactsAsync(factsJson, cancellationToken);
-                }
-
-                var resultJson = await response.Content.ReadAsStringAsync(cancellationToken);
-                using var doc = JsonDocument.Parse(resultJson);
-
-                if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
-                {
-                    var content = candidates[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
-                    if (!string.IsNullOrWhiteSpace(content))
-                    {
-                        return content;
-                    }
-                }
-
-                _logger.LogWarning("Google AI Studio zwróciło pustą odpowiedź. Przełączanie na OpenRouter.");
-                return await _openRouterClient.GenerateSummaryFromFactsAsync(factsJson, cancellationToken);
+                return await CallGeminiAsync(systemPrompt, factsJson, true, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -103,5 +119,61 @@ namespace SyntInfo.Infrastructure.Services
                 return await _openRouterClient.GenerateSummaryFromFactsAsync(factsJson, cancellationToken);
             }
         }
+
+        private async Task<string> CallGeminiAsync(string systemPrompt, string userPrompt, bool forceJson, CancellationToken cancellationToken)
+        {
+            var requestUri = $"{_baseUrl}/{_modelName}:generateContent?key={_apiKey}";
+
+            var payloadObject = new
+            {
+                system_instruction = new
+                {
+                    parts = new[] { new { text = systemPrompt } }
+                },
+                contents = new[]
+                {
+                    new 
+                    { 
+                        role = "user",
+                        parts = new[] { new { text = userPrompt } }
+                    }
+                },
+                generationConfig = new
+                {
+                    temperature = 0.3,
+                    responseMimeType = forceJson ? "application/json" : "text/plain"
+                }
+            };
+
+            var response = await _httpClient.PostAsJsonAsync(requestUri, payloadObject, cancellationToken);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            {
+                _logger.LogWarning("Google AI Studio: Przekroczono limit zapytań (429 Too Many Requests).");
+                throw new Exception("Google AI Studio Rate Limit");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Błąd Google AI Studio API ({StatusCode}). Szczegóły: {Error}", response.StatusCode, error);
+                throw new Exception($"Google AI Studio API error: {response.StatusCode}");
+            }
+
+            var resultJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(resultJson);
+
+            if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
+            {
+                var content = candidates[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    return content;
+                }
+            }
+
+            return string.Empty;
+        }
+
     }
 }

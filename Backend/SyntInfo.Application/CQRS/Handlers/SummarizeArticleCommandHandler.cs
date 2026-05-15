@@ -45,8 +45,8 @@ namespace SyntInfo.Application.CQRS.Handlers
                 // KROK 0: Pobranie kontekstu z Tavily
                 var searchResults = await _searchService.SearchDetailedInfoAsync(command.Title, safeToken);
 
-                // KROK 1: Analityk (OpenRouter) - Fakty JSON -> DeepContent
-                var factsJsonRaw = await _openRouterClient.GenerateFactsAsync(command.Content, searchResults, safeToken);
+                // KROK 1: Analityk (Google AI Studio z fallbackiem na OpenRouter) - Fakty JSON -> DeepContent
+                var factsJsonRaw = await _googleAiStudioClient.GenerateFactsAsync(command.Content, searchResults, safeToken);
                 var factsJson = CleanJsonResponse(factsJsonRaw);
 
                 // KROK 2: Redaktor (Google AI Studio z fallbackiem na OpenRouter) - Minimalistyczne podsumowanie JSON (Tytuł, Esencja, Kategoria)

@@ -19,6 +19,7 @@ namespace SyntInfo.Application.CQRS.Handlers
         private readonly IUnitOfWork _uow;
         private readonly IMessageBus _bus;
         private readonly IOpenRouterClient _openRouterClient;
+        private readonly IGoogleAiStudioClient _googleAiStudioClient;
         private readonly ILogger<TriggerRssFetchCommandHandler> _logger;
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
@@ -27,6 +28,7 @@ namespace SyntInfo.Application.CQRS.Handlers
             IUnitOfWork uow,
             IMessageBus bus,
             IOpenRouterClient openRouterClient,
+            IGoogleAiStudioClient googleAiStudioClient,
             ILogger<TriggerRssFetchCommandHandler> logger,
             IConfiguration configuration,
             IHttpClientFactory httpClientFactory)
@@ -34,6 +36,7 @@ namespace SyntInfo.Application.CQRS.Handlers
             _uow = uow;
             _bus = bus;
             _openRouterClient = openRouterClient;
+            _googleAiStudioClient = googleAiStudioClient;
             _logger = logger;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
@@ -256,7 +259,7 @@ namespace SyntInfo.Application.CQRS.Handlers
                 var jsonStr = JsonSerializer.Serialize(selectionList);
                 var prompt = $"Analizujesz newsy dla regionu {region}. Z poniższej listy JSON wybierz DOKŁADNIE {maxPerRegion} najważniejszych newsów. Zwróć tylko tablicę numerów index, np. [1, 5, 12].\n\n{jsonStr}";
 
-                var selectedIndexes = await _openRouterClient.SelectTopArticlesIndexesAsync(prompt, maxPerRegion, cancellationToken);
+                var selectedIndexes = await _googleAiStudioClient.SelectTopArticlesIndexesAsync(prompt, maxPerRegion, cancellationToken);
 
                 if (selectedIndexes == null || !selectedIndexes.Any())
                 {
