@@ -35,6 +35,7 @@ services:
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${POSTGRES_DB:-syntinfo_db};Username=${POSTGRES_USER:-synt_user};Password=${POSTGRES_PASSWORD:-synt_password}
       - OpenRouter__ApiKey=${OPENROUTER_API_KEY}
       - Search__TavilyApiKey=${TAVILY_API_KEY}
+      - GoogleAiStudio__ApiKey=${GOOGLE_AI_STUDIO_API_KEY}
     depends_on:
       - db
     networks:
