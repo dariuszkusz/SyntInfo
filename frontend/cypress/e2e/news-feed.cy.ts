@@ -32,7 +32,7 @@ describe('News Feed', () => {
   });
 
   it('should display the app title', () => {
-    cy.contains('SyntInfo').should('be.visible');
+    cy.contains('InfoSkrót').should('be.visible');
   });
 
   it('should display Poland and World sections', () => {
