@@ -15,9 +15,17 @@ import { lucideGlobe } from '@ng-icons/lucide';
       <!-- Header -->
       <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-primary/20 p-4">
         <div class="max-w-4xl mx-auto flex justify-between items-center">
-          <h1 class="text-2xl font-bold tracking-tight text-aux3">
-            Info<span class="text-primary italic">Skrót</span>
-          </h1>
+          <div class="flex items-center space-x-3">
+            <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
+            <div class="flex flex-col">
+              <h1 class="text-2xl font-bold tracking-tight text-aux3 leading-none">
+                Info<span class="text-primary italic">Skrót</span>
+              </h1>
+              <span class="text-[10px] uppercase tracking-widest font-semibold opacity-60 mt-1">
+                Skrót najważniejszych informacji
+              </span>
+            </div>
+          </div>
           <div class="flex items-center space-x-4">
             @if (isDevMode) {
               <button 
