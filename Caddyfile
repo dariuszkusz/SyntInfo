@@ -4,7 +4,7 @@
 
 http://178.105.93.87 {
     # Przekierowanie do API
-    handle_path /api/* {
+    handle /api/* {
         reverse_proxy api:8080
     }
 
