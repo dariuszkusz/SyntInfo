@@ -1,0 +1,15 @@
+# Uwaga: Dla adresu IP Caddy użyje zwykłego protokołu HTTP, ponieważ certyfikaty SSL (Let's Encrypt)
+# wymagają pełnej nazwy domeny (np. mojastrona.pl). Aby uzyskać kłódkę w przeglądarce, 
+# musisz podpiąć domenę, a następnie zamienić 'http://178.105.93.87' na nazwę tej domeny.
+
+http://178.105.93.87 {
+    # Przekierowanie do API
+    handle_path /api/* {
+        reverse_proxy api:8080
+    }
+
+    # Przekierowanie ruchu na aplikację frontendową (Angular)
+    handle /* {
+        reverse_proxy frontend:80
+    }
+}

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, isDevMode } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NewsStore } from '../../state/news.store';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
@@ -15,23 +15,30 @@ import { lucideGlobe } from '@ng-icons/lucide';
       <!-- Header -->
       <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-primary/20 p-4">
         <div class="max-w-4xl mx-auto flex justify-between items-center">
-          <h1 class="text-2xl font-bold tracking-tight text-aux3">
-            Synt<span class="text-primary italic">Info</span>
-          </h1>
-          <div class="flex items-center space-x-4">
-            <button 
-              (click)="store.syncNews()"
-              class="text-[10px] px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all font-bold uppercase tracking-wider">
-              Sync On Demand
-            </button>
-            <button 
-              (click)="store.clearNews()"
-              class="text-[10px] px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-all font-bold uppercase tracking-wider">
-              Wyczyść bazę
-            </button>
-            <div class="text-xs uppercase tracking-widest font-semibold opacity-60">
-              Automated AI News Aggregator
+          <div class="flex items-center space-x-3">
+            <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
+            <div class="flex flex-col">
+              <h1 class="text-2xl font-bold tracking-tight text-aux3 leading-none">
+                Info<span class="text-primary italic">Skrót</span>
+              </h1>
+              <span class="text-[10px] uppercase tracking-widest font-semibold opacity-60 mt-1">
+                Skrót najważniejszych informacji
+              </span>
             </div>
+          </div>
+          <div class="flex items-center space-x-4">
+            @if (isDevMode) {
+              <button 
+                (click)="store.syncNews()"
+                class="text-[10px] px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all font-bold uppercase tracking-wider">
+                Sync On Demand
+              </button>
+              <button 
+                (click)="store.clearNews()"
+                class="text-[10px] px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-all font-bold uppercase tracking-wider">
+                Wyczyść bazę
+              </button>
+            }
           </div>
         </div>
       </header>
@@ -154,6 +161,7 @@ import { lucideGlobe } from '@ng-icons/lucide';
 })
 export class NewsFeedComponent implements OnInit {
   readonly store = inject(NewsStore);
+  readonly isDevMode = isDevMode();
 
   ngOnInit() {
     this.store.loadTopNews();
