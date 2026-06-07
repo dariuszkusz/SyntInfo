@@ -11,7 +11,7 @@ import { lucideGlobe } from '@ng-icons/lucide';
   imports: [CommonModule, NgIconComponent],
   providers: [provideIcons({ flagPl, lucideGlobe })],
   template: `
-    <div class="min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
+    <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
       <!-- Header -->
       <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-primary/20 p-4">
         <div class="max-w-4xl mx-auto flex justify-between items-center">
@@ -44,7 +44,7 @@ import { lucideGlobe } from '@ng-icons/lucide';
       </header>
 
       <!-- Main Feed -->
-      <main class="max-w-4xl mx-auto p-4 py-8">
+      <main class="flex-grow max-w-4xl w-full mx-auto p-4 py-8">
         @if (store.isLoading()) {
           <div class="flex flex-col items-center justify-center py-20 space-y-4">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -137,12 +137,22 @@ import { lucideGlobe } from '@ng-icons/lucide';
         </article>
       </ng-template>
 
-      <!-- Floating Action Button for Mobile / PWA -->
-      <button 
-        (click)="store.loadTopNews()"
-        class="fixed bottom-8 right-8 w-16 h-16 bg-aux3 text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all lg:hidden z-50">
-        <span class="text-2xl">⚡</span>
-      </button>
+
+
+      <!-- Footer -->
+      <footer class="bg-white border-t border-aux1/50 py-8 px-4 mt-auto">
+        <div class="max-w-4xl mx-auto text-center space-y-3">
+          <p class="text-xs font-bold text-aux3">
+            Info Skrót - Twój codzienny skrót informacji i wiadomości w pigułce.
+          </p>
+          <p class="text-[11px] text-aux2 opacity-70 leading-relaxed max-w-xl mx-auto">
+            Bądź na bieżąco każdego dnia bez szumu informacyjnego. Nasz portal agreguje najważniejsze wydarzenia z kraju i ze świata, serwując je w postaci zwięzłej info pigułki. Szybka prasówka i esencja wiadomości dostosowana do Twojego tempa życia.
+          </p>
+          <p class="text-[10px] text-aux2 opacity-40">
+            &copy; 2026 InfoSkrót. Wszelkie prawa zastrzeżone.
+          </p>
+        </div>
+      </footer>
     </div>
   `,
   styles: [
