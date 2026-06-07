@@ -48,7 +48,5 @@ describe('News Feed', () => {
   });
 
 
-  it('should show refresh button (⚡)', () => {
-    cy.get('button').contains('⚡').should('be.visible');
-  });
+
 });

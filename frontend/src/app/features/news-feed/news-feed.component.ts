@@ -137,12 +137,7 @@ import { lucideGlobe } from '@ng-icons/lucide';
         </article>
       </ng-template>
 
-      <!-- Floating Action Button for Mobile / PWA -->
-      <button 
-        (click)="store.loadTopNews()"
-        class="fixed bottom-8 right-8 w-16 h-16 bg-aux3 text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all lg:hidden z-50">
-        <span class="text-2xl">⚡</span>
-      </button>
+
 
       <!-- Footer -->
       <footer class="bg-white border-t border-aux1/50 py-8 px-4 mt-auto">
