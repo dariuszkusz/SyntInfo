@@ -1,6 +1,6 @@
 {
-  "name": "frontend",
-  "short_name": "frontend",
+  "name": "Info Skrót",
+  "short_name": "InfoSkrót",
   "display": "standalone",
   "scope": "./",
   "start_url": "./",

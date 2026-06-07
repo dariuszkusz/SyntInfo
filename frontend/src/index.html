@@ -2,34 +2,94 @@
 <html lang="pl">
   <head>
     <meta charset="utf-8" />
-    <title>Info Skrót - Skrót najwazniejszych informacji.</title>
+    <title>Info Skrót - Najważniejsze wiadomości w pigułce | Skrót informacji i info pigułka</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     
     <!-- SEO Meta Tags -->
-    <meta name="description" content="Info Skrót - Najważniejsze informacje i wiadomości w zwięzłym skrócie. Bądź na bieżąco z najważniejszymi wydarzeniami z kraju i ze świata każdego dnia." />
+    <meta name="description" content="Info Skrót to Twoja codzienna info pigułka i zwięzły skrót informacji z kraju i ze świata. Najważniejsze wiadomości i szybka prasówka każdego dnia." />
+    <meta name="keywords" content="info skrót, info pigułka, skrót informacji, wiadomości w pigułce, prasówka, skrót wiadomości, najważniejsze informacje, aktualności" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://infoskrot.pl/" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://infoskrot.pl/" />
-    <meta property="og:title" content="Info Skrót - Skrót najwazniejszych informacji." />
-    <meta property="og:description" content="Najważniejsze informacje i wiadomości w zwięzłym skrócie. Bądź na bieżąco z najważniejszymi wydarzeniami z kraju i ze świata." />
+    <meta property="og:title" content="Info Skrót - Najważniejsze wiadomości w pigułce | Skrót informacji" />
+    <meta property="og:description" content="Zwięzły skrót informacji z kraju i ze świata. Codzienna info pigułka i szybka prasówka dla każdego." />
     <meta property="og:image" content="https://infoskrot.pl/icons/icon-192x192.png" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary" />
     <meta property="twitter:url" content="https://infoskrot.pl/" />
-    <meta property="twitter:title" content="Info Skrót - Skrót najwazniejszych informacji." />
-    <meta property="twitter:description" content="Najważniejsze informacje i wiadomości w zwięzłym skrócie. Bądź na bieżąco z najważniejszymi wydarzeniami z kraju i ze świata." />
+    <meta property="twitter:title" content="Info Skrót - Najważniejsze wiadomości w pigułce | Skrót informacji" />
+    <meta property="twitter:description" content="Zwięzły skrót informacji z kraju i ze świata. Codzienna info pigułka i szybka prasówka dla każdego." />
     <meta property="twitter:image" content="https://infoskrot.pl/icons/icon-192x192.png" />
+
+    <!-- Ustrukturyzowane dane JSON-LD (WebSite) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Info Skrót",
+      "alternateName": [
+        "infoskrot",
+        "infoskrot.pl",
+        "info skrót",
+        "info pigułka",
+        "skrót informacji",
+        "prasówka"
+      ],
+      "url": "https://infoskrot.pl/",
+      "description": "Najważniejsze informacje i wiadomości w zwięzłym skrócie. Codzienna info pigułka i prasówka z kraju i ze świata."
+    }
+    </script>
 
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
     <link rel="manifest" href="manifest.webmanifest" />
   </head>
   <body>
-    <app-root></app-root>
+    <app-root>
+      <!-- Statyczny szkielet i zawartość SEO pod kątem pierwszego indeksowania -->
+      <div class="min-h-screen bg-[#f4f7f6] text-[#2d3436] font-sans flex flex-col">
+        <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-[#00b894]/20 p-4">
+          <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+              <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
+              <div class="flex flex-col">
+                <h1 class="text-2xl font-bold tracking-tight text-[#1e272e] leading-none">
+                  Info<span class="text-[#00b894] italic">Skrót</span>
+                </h1>
+                <span class="text-[10px] uppercase tracking-widest font-semibold opacity-60 mt-1">
+                  Skrót najważniejszych informacji
+                </span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="flex-grow max-w-4xl w-full mx-auto p-4 py-8">
+          <div class="flex flex-col items-center justify-center py-20 space-y-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00b894]"></div>
+            <p class="text-sm italic animate-pulse">Ładowanie najnowszych wiadomości...</p>
+          </div>
+        </main>
+
+        <footer class="bg-white border-t border-[#e9edeb]/50 py-8 px-4 mt-auto">
+          <div class="max-w-4xl mx-auto text-center space-y-3">
+            <p class="text-xs font-bold text-[#1e272e]">
+              Info Skrót - Twój codzienny skrót informacji i wiadomości w pigułce.
+            </p>
+            <p class="text-[11px] text-[#2d3436] opacity-70 leading-relaxed max-w-xl mx-auto">
+              Bądź na bieżąco każdego dnia bez szumu informacyjnego. Nasz portal agreguje najważniejsze wydarzenia z kraju i ze świata, serwując je w postaci zwięzłej info pigułki. Szybka prasówka i esencja wiadomości dostosowana do Twojego tempa życia.
+            </p>
+            <p class="text-[10px] text-[#2d3436] opacity-40">
+              &copy; 2026 InfoSkrót. Wszelkie prawa zastrzeżone.
+            </p>
+          </div>
+        </footer>
+      </div>
+    </app-root>
     <noscript>Please enable JavaScript to continue using this application.</noscript>
   </body>
 </html>
