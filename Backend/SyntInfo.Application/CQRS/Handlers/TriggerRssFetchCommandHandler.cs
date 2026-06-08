@@ -11,6 +11,7 @@ using Wolverine.Attributes;
 using SyntInfo.Application.Interfaces;
 using SyntInfo.Application.Models.Tavily;
 using System.Net.Http.Json;
+using Pgvector;
 
 namespace SyntInfo.Application.CQRS.Handlers
 {
@@ -153,18 +154,23 @@ namespace SyntInfo.Application.CQRS.Handlers
                 newArticlesToProcess.AddRange(discovered);
             }
 
+            // KROK 1: Pre-processing deduplikacja (porównanie kandydatów ze sobą oraz z bazą)
+            var deduplicatedCandidates = await PreprocessDeduplicateCandidatesAsync(newArticlesToProcess, cancellationToken);
+
             var allCommands = new List<SummarizeArticleCommand>();
-            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.World, newArticlesToProcess.Where(a => a.Region == SourceRegion.World).ToList(), maxPerRegion, cancellationToken));
-            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.Poland, newArticlesToProcess.Where(a => a.Region == SourceRegion.Poland).ToList(), maxPerRegion, cancellationToken));
+            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.World, deduplicatedCandidates.Where(a => a.Region == SourceRegion.World).ToList(), maxPerRegion, cancellationToken));
+            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.Poland, deduplicatedCandidates.Where(a => a.Region == SourceRegion.Poland).ToList(), maxPerRegion, cancellationToken));
 
             if (allCommands.Any())
             {
-
                 foreach (var cmd in allCommands)
                 {
                     await _bus.InvokeAsync(cmd, cancellationToken);
                 }
             }
+
+            // KROK 2: Post-processing deduplikacja (scalenie nowo dodanych i istniejących artykułów po podsumowaniu)
+            await PostprocessDeduplicateActiveArticlesAsync(cancellationToken);
         }
 
         private async Task<List<SummarizeArticleCommand>> DiscoverNewsWithTavilyAsync(SourceRegion region, CancellationToken cancellationToken)
@@ -282,6 +288,207 @@ namespace SyntInfo.Application.CQRS.Handlers
                 _logger.LogError(ex, "Błąd w GetCommandsToExecuteAsync dla regionu {Region}", region);
                 return commandsToExecute;
             }
+        }
+
+        private async Task<List<SummarizeArticleCommand>> PreprocessDeduplicateCandidatesAsync(List<SummarizeArticleCommand> candidates, CancellationToken cancellationToken)
+        {
+            if (candidates == null || !candidates.Any())
+                return new List<SummarizeArticleCommand>();
+
+            _logger.LogInformation("[Pre-Process] Starting preprocessing deduplication for {Count} candidates.", candidates.Count);
+
+            var cutoffDate = DateTime.UtcNow.AddHours(-24);
+            var activeArticles = await _uow.Repository<NewsArticle>().Query()
+                .Where(a => a.IsActive && a.PublishedAt >= cutoffDate)
+                .ToListAsync(cancellationToken);
+
+            var remainingCandidates = new List<(SummarizeArticleCommand Cmd, float[] Embedding)>();
+
+            foreach (var candidate in candidates)
+            {
+                // Generuj embedding tytułu
+                float[] candidateEmbedding;
+                try
+                {
+                    candidateEmbedding = await _openRouterClient.GenerateEmbeddingsAsync(candidate.Title, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to generate title embedding for candidate: {Title}. Skipping semantic check.", candidate.Title);
+                    remainingCandidates.Add((candidate, Array.Empty<float>()));
+                    continue;
+                }
+
+                if (candidateEmbedding.Length == 0)
+                {
+                    remainingCandidates.Add((candidate, Array.Empty<float>()));
+                    continue;
+                }
+
+                // Sprawdź czy pasuje do jakiegoś artykułu z bazy
+                var matchedDbArticle = activeArticles
+                    .Where(a => a.Region == candidate.Region && a.Embedding != null)
+                    .Select(a => new { Article = a, Similarity = CalculateCosineSimilarity(candidateEmbedding, a.Embedding!.ToArray()) })
+                    .Where(x => x.Similarity >= 0.85) // próg podobieństwa tytułu do streszczenia (domyślnie 0.85)
+                    .OrderByDescending(x => x.Similarity)
+                    .FirstOrDefault();
+
+                if (matchedDbArticle != null)
+                {
+                    _logger.LogInformation("[Pre-Process] Candidate '{CandidateTitle}' matched existing article '{DbTitle}' (similarity: {Similarity:F2}). Merging URL.", candidate.Title, matchedDbArticle.Article.Title, matchedDbArticle.Similarity);
+                    
+                    var newUrls = new List<string>(matchedDbArticle.Article.SourceUrls);
+                    if (!newUrls.Contains(candidate.Url))
+                    {
+                        newUrls.Add(candidate.Url);
+                    }
+                    if (candidate.AdditionalUrls != null)
+                    {
+                        foreach (var u in candidate.AdditionalUrls)
+                        {
+                            if (!newUrls.Contains(u))
+                                newUrls.Add(u);
+                        }
+                    }
+
+                    matchedDbArticle.Article.SourceUrls = newUrls;
+                    _uow.Repository<NewsArticle>().Update(matchedDbArticle.Article);
+                }
+                else
+                {
+                    remainingCandidates.Add((candidate, candidateEmbedding));
+                }
+            }
+
+            // Zapiszmy zmiany w bazie (dla tych podpiętych URLi do istniejących artykułów)
+            await _uow.SaveChangesAsync(cancellationToken);
+
+            // Teraz deduplikacja wewnątrz paczki kandydatów
+            var uniqueCandidates = new List<(SummarizeArticleCommand Cmd, float[] Embedding)>();
+            foreach (var item in remainingCandidates)
+            {
+                if (item.Embedding.Length == 0)
+                {
+                    uniqueCandidates.Add(item);
+                    continue;
+                }
+
+                var duplicate = uniqueCandidates
+                    .Where(x => x.Cmd.Region == item.Cmd.Region && x.Embedding.Length > 0)
+                    .Select(x => new { Unique = x, Similarity = CalculateCosineSimilarity(item.Embedding, x.Embedding) })
+                    .Where(x => x.Similarity >= 0.85) // próg podobieństwa tytułów między sobą (domyślnie 0.85)
+                    .OrderByDescending(x => x.Similarity)
+                    .FirstOrDefault();
+
+                if (duplicate != null)
+                {
+                    _logger.LogInformation("[Pre-Process] Candidate '{CandidateTitle}' duplicate of candidate '{UniqueTitle}' (similarity: {Similarity:F2}). Merging URLs.", item.Cmd.Title, duplicate.Unique.Cmd.Title, duplicate.Similarity);
+                    
+                    var urls = duplicate.Unique.Cmd.AdditionalUrls ?? new List<string>();
+                    if (!urls.Contains(item.Cmd.Url))
+                        urls.Add(item.Cmd.Url);
+                    if (item.Cmd.AdditionalUrls != null)
+                    {
+                        foreach (var u in item.Cmd.AdditionalUrls)
+                        {
+                            if (!urls.Contains(u))
+                                urls.Add(u);
+                        }
+                    }
+
+                    var updatedCmd = duplicate.Unique.Cmd with { AdditionalUrls = urls };
+                    var idx = uniqueCandidates.IndexOf(duplicate.Unique);
+                    uniqueCandidates[idx] = (updatedCmd, duplicate.Unique.Embedding);
+                }
+                else
+                {
+                    uniqueCandidates.Add(item);
+                }
+            }
+
+            return uniqueCandidates.Select(x => x.Cmd).ToList();
+        }
+
+        private async Task PostprocessDeduplicateActiveArticlesAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("[Post-Process] Starting post-processing deduplication.");
+            var cutoffDate = DateTime.UtcNow.AddHours(-24);
+            var activeArticles = await _uow.Repository<NewsArticle>().Query()
+                .Where(a => a.IsActive && a.Embedding != null && a.PublishedAt >= cutoffDate)
+                .ToListAsync(cancellationToken);
+
+            var modified = false;
+            
+            // Grupowanie według regionu, aby uniknąć scalania artykułów z różnych regionów
+            var groups = activeArticles.GroupBy(a => a.Region);
+            foreach (var group in groups)
+            {
+                var articles = group.ToList();
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var primary = articles[i];
+                    if (!primary.IsActive) continue; // Już scalony/deaktywowany
+
+                    for (int j = i + 1; j < articles.Count; j++)
+                    {
+                        var secondary = articles[j];
+                        if (!secondary.IsActive) continue;
+
+                        if (primary.Embedding == null || secondary.Embedding == null)
+                            continue;
+
+                        var similarity = CalculateCosineSimilarity(primary.Embedding.ToArray(), secondary.Embedding.ToArray());
+                        if (similarity >= 0.83) // Próg podobieństwa dla pełnych streszczeń (domyślnie 0.83)
+                        {
+                            _logger.LogInformation("[Post-Process] Merging article '{SecondaryTitle}' into '{PrimaryTitle}' due to similarity: {Similarity:F2}.", secondary.Title, primary.Title, similarity);
+                            
+                            var newUrls = new List<string>(primary.SourceUrls);
+                            foreach (var url in secondary.SourceUrls)
+                            {
+                                if (!newUrls.Contains(url))
+                                {
+                                    newUrls.Add(url);
+                                }
+                            }
+                            
+                            primary.SourceUrls = newUrls;
+                            secondary.IsActive = false;
+                            
+                            _uow.Repository<NewsArticle>().Update(primary);
+                            _uow.Repository<NewsArticle>().Update(secondary);
+                            modified = true;
+                        }
+                    }
+                }
+            }
+
+            if (modified)
+            {
+                await _uow.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation("[Post-Process] Successfully saved merged article updates to database.");
+            }
+        }
+
+        private static double CalculateCosineSimilarity(float[] vec1, float[] vec2)
+        {
+            if (vec1.Length != vec2.Length)
+                return 0;
+
+            double dotProduct = 0;
+            double normA = 0;
+            double normB = 0;
+
+            for (int i = 0; i < vec1.Length; i++)
+            {
+                dotProduct += vec1[i] * vec2[i];
+                normA += vec1[i] * vec1[i];
+                normB += vec2[i] * vec2[i];
+            }
+
+            if (normA == 0 || normB == 0)
+                return 0;
+
+            return dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB));
         }
     }
 }
