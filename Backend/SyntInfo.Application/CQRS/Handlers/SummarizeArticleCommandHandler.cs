@@ -93,13 +93,23 @@ namespace SyntInfo.Application.CQRS.Handlers
                     // Nie wywołujemy SaveChangesAsync tutaj, EF obsłuży to w jednej transakcji
                 }
 
+                var urls = new List<string> { command.Url };
+                if (command.AdditionalUrls != null)
+                {
+                    foreach (var u in command.AdditionalUrls)
+                    {
+                        if (!urls.Contains(u))
+                            urls.Add(u);
+                    }
+                }
+
                 var article = new NewsArticle
                 {
                     Title = displayTitle,
                     OriginalTitle = command.Title,
                     SummaryText = essence,
                     PublishedAt = command.PublishedAt,
-                    SourceUrls = new List<string> { command.Url },
+                    SourceUrls = urls,
                     Region = command.Region,
                     Category = category,
                     Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null,
