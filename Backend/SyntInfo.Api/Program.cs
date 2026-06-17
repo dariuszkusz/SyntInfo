@@ -22,6 +22,19 @@ try
     builder.Host.UseWolverine(opts =>
     {
         opts.Discovery.IncludeAssembly(typeof(SyntInfo.Application.CQRS.Handlers.GetNewsArticlesQueryHandler).Assembly);
+        
+        // Optymalizacja generowania kodu dla środowiska produkcyjnego
+        opts.CodeGeneration.TypeLoadMode = builder.Environment.IsDevelopment()
+            ? JasperFx.CodeGeneration.TypeLoadMode.Dynamic
+            : JasperFx.CodeGeneration.TypeLoadMode.Auto;
+
+        // Wyciszenie ostrzeżeń o Service Location dla typów rejestrowanych za pomocą fabryk lambda
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<AppDbContext>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<Microsoft.EntityFrameworkCore.DbContextOptions<AppDbContext>>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IUnitOfWork>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IOpenRouterClient>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IGoogleAiStudioClient>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<ISearchService>();
     });
 
 
@@ -93,7 +106,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("AllowAngular");
 app.UseAuthorization();
 app.MapControllers();
