@@ -41,44 +41,67 @@ namespace SyntInfo.Infrastructure.Persistence
 
         private static async Task SeedRssSourcesAsync(AppDbContext dbContext, IConfiguration configuration)
         {
-            var polandSourcesConfig = configuration.GetSection("RssSources:Poland").Get<List<RssSourceConfig>>();
-            var worldSourcesConfig = configuration.GetSection("RssSources:World").Get<List<RssSourceConfig>>();
+            var polandSourcesConfig = configuration.GetSection("RssSources:Poland").Get<List<RssSourceConfig>>() ?? new();
+            var worldSourcesConfig = configuration.GetSection("RssSources:World").Get<List<RssSourceConfig>>() ?? new();
 
             bool hasChanges = false;
+            var allConfigUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (polandSourcesConfig != null)
+            foreach (var config in polandSourcesConfig)
             {
-                foreach (var config in polandSourcesConfig)
+                allConfigUrls.Add(config.Url);
+                var existing = await dbContext.NewsSources.FirstOrDefaultAsync(s => s.RssUrl == config.Url);
+                if (existing == null)
                 {
-                    if (!await dbContext.NewsSources.AnyAsync(s => s.RssUrl == config.Url))
+                    dbContext.NewsSources.Add(new NewsSource
                     {
-                        dbContext.NewsSources.Add(new NewsSource
-                        {
-                            Name = config.Name,
-                            RssUrl = config.Url,
-                            Region = SourceRegion.Poland,
-                            IsActive = true
-                        });
-                        hasChanges = true;
-                    }
+                        Name = config.Name,
+                        RssUrl = config.Url,
+                        Region = SourceRegion.Poland,
+                        IsActive = true
+                    });
+                    hasChanges = true;
+                }
+                else if (!existing.IsActive)
+                {
+                    existing.IsActive = true;
+                    dbContext.NewsSources.Update(existing);
+                    hasChanges = true;
                 }
             }
 
-            if (worldSourcesConfig != null)
+            foreach (var config in worldSourcesConfig)
             {
-                foreach (var config in worldSourcesConfig)
+                allConfigUrls.Add(config.Url);
+                var existing = await dbContext.NewsSources.FirstOrDefaultAsync(s => s.RssUrl == config.Url);
+                if (existing == null)
                 {
-                    if (!await dbContext.NewsSources.AnyAsync(s => s.RssUrl == config.Url))
+                    dbContext.NewsSources.Add(new NewsSource
                     {
-                        dbContext.NewsSources.Add(new NewsSource
-                        {
-                            Name = config.Name,
-                            RssUrl = config.Url,
-                            Region = SourceRegion.World,
-                            IsActive = true
-                        });
-                        hasChanges = true;
-                    }
+                        Name = config.Name,
+                        RssUrl = config.Url,
+                        Region = SourceRegion.World,
+                        IsActive = true
+                    });
+                    hasChanges = true;
+                }
+                else if (!existing.IsActive)
+                {
+                    existing.IsActive = true;
+                    dbContext.NewsSources.Update(existing);
+                    hasChanges = true;
+                }
+            }
+
+            // Deaktywuj źródła z bazy danych, które nie występują już w appsettings.json
+            var dbSources = await dbContext.NewsSources.ToListAsync();
+            foreach (var dbSource in dbSources)
+            {
+                if (!allConfigUrls.Contains(dbSource.RssUrl) && dbSource.IsActive)
+                {
+                    dbSource.IsActive = false;
+                    dbContext.NewsSources.Update(dbSource);
+                    hasChanges = true;
                 }
             }
 

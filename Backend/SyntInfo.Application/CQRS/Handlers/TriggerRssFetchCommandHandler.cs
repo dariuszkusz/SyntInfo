@@ -86,7 +86,32 @@ namespace SyntInfo.Application.CQRS.Handlers
                     client.DefaultRequestHeaders.Add("Cache-Control", "no-cache");
                     client.DefaultRequestHeaders.Add("Pragma", "no-cache");
 
-                    var response = await client.GetAsync(source.RssUrl, cancellationToken);
+                    var currentUrl = source.RssUrl;
+                    HttpResponseMessage response = null!;
+                    int redirectCount = 0;
+                    const int maxRedirects = 5;
+
+                    while (redirectCount <= maxRedirects)
+                    {
+                        response = await client.GetAsync(currentUrl, cancellationToken);
+                        if ((int)response.StatusCode >= 300 && (int)response.StatusCode < 400)
+                        {
+                            var location = response.Headers.Location;
+                            if (location != null)
+                            {
+                                if (!location.IsAbsoluteUri)
+                                {
+                                    location = new Uri(new Uri(currentUrl), location);
+                                }
+                                currentUrl = location.ToString();
+                                redirectCount++;
+                                _logger.LogInformation("Podążanie za przekierowaniem RSS ({Count}/{Max}) do: {RedirectUrl}", redirectCount, maxRedirects, currentUrl);
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+
                     if (!response.IsSuccessStatusCode)
                     {
                         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -94,7 +119,7 @@ namespace SyntInfo.Application.CQRS.Handlers
                         else if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                             _logger.LogWarning("Dostęp do RSS zabroniony (403). Próba obejścia nagłówkami nie powiodła się: {SourceUrl}", source.RssUrl);
                         else if ((int)response.StatusCode >= 300 && (int)response.StatusCode < 400)
-                            _logger.LogWarning("RSS zwrócił przekierowanie {StatusCode} ({CodeInt}), którego HttpClient nie podążył: {SourceUrl}", response.StatusCode, (int)response.StatusCode, source.RssUrl);
+                            _logger.LogWarning("RSS zwrócił przekierowanie {StatusCode} ({CodeInt}), którego HttpClient nie podążył (przekroczono limit lub brak nagłówka Location): {SourceUrl}", response.StatusCode, (int)response.StatusCode, source.RssUrl);
                         else
                             _logger.LogWarning("Błąd podczas pobierania RSS {StatusCode}: {SourceUrl}", response.StatusCode, source.RssUrl);
 
