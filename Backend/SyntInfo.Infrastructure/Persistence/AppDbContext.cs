@@ -29,6 +29,14 @@ public class AppDbContext : DbContext
             
             // Konfiguracja wektora (wymiar 1536 dla OpenAI text-embedding-3-small via OpenRouter)
             entity.Property(e => e.Embedding).HasColumnType("vector(1536)"); 
+
+            // Indeks kompozytowy dla częstych zapytań o aktywne i najświeższe artykuły
+            entity.HasIndex(e => new { e.IsActive, e.PublishedAt });
+
+            // Indeks HNSW (Hierarchical Navigable Small World) dla szybkiego wyszukiwania podobieństwa
+            entity.HasIndex(e => e.Embedding)
+                  .HasMethod("hnsw")
+                  .HasOperators("vector_cosine_ops");
         });
 
         modelBuilder.Entity<NewsCategory>(entity =>

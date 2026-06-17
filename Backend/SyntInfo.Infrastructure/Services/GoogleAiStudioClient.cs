@@ -145,30 +145,65 @@ namespace SyntInfo.Infrastructure.Services
                 }
             };
 
-            var response = await _httpClient.PostAsJsonAsync(requestUri, payloadObject, cancellationToken);
+            int maxRetries = 3;
+            int delayMs = 2000;
 
-            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            for (int attempt = 0; attempt <= maxRetries; attempt++)
             {
-                _logger.LogWarning("Google AI Studio: Przekroczono limit zapytań (429 Too Many Requests).");
-                throw new Exception("Google AI Studio Rate Limit");
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var error = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogError("Błąd Google AI Studio API ({StatusCode}). Szczegóły: {Error}", response.StatusCode, error);
-                throw new Exception($"Google AI Studio API error: {response.StatusCode}");
-            }
-
-            var resultJson = await response.Content.ReadAsStringAsync(cancellationToken);
-            using var doc = JsonDocument.Parse(resultJson);
-
-            if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
-            {
-                var content = candidates[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
-                if (!string.IsNullOrWhiteSpace(content))
+                try
                 {
-                    return content;
+                    var response = await _httpClient.PostAsJsonAsync(requestUri, payloadObject, cancellationToken);
+
+                    if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    {
+                        if (attempt == maxRetries)
+                        {
+                            _logger.LogWarning("Google AI Studio: Przekroczono limit zapytań (429 Too Many Requests) po {Attempt} próbach.", attempt + 1);
+                            throw new Exception("Google AI Studio Rate Limit");
+                        }
+
+                        _logger.LogWarning("Google AI Studio: Otrzymano status 429. Próba {Attempt}/{Max}. Czekam {Delay}ms...", attempt + 1, maxRetries + 1, delayMs);
+                        await Task.Delay(delayMs, cancellationToken);
+                        delayMs *= 2;
+                        continue;
+                    }
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var error = await response.Content.ReadAsStringAsync(cancellationToken);
+                        _logger.LogError("Błąd Google AI Studio API ({StatusCode}). Szczegóły: {Error}", response.StatusCode, error);
+
+                        // Retry for transient 5xx server errors
+                        if ((int)response.StatusCode >= 500 && attempt < maxRetries)
+                        {
+                            _logger.LogWarning("Google AI Studio: Otrzymano status {StatusCode}. Próba {Attempt}/{Max}. Czekam {Delay}ms...", response.StatusCode, attempt + 1, maxRetries + 1, delayMs);
+                            await Task.Delay(delayMs, cancellationToken);
+                            delayMs *= 2;
+                            continue;
+                        }
+
+                        throw new Exception($"Google AI Studio API error: {response.StatusCode}");
+                    }
+
+                    var resultJson = await response.Content.ReadAsStringAsync(cancellationToken);
+                    using var doc = JsonDocument.Parse(resultJson);
+
+                    if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
+                    {
+                        var content = candidates[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
+                        if (!string.IsNullOrWhiteSpace(content))
+                        {
+                            return content;
+                        }
+                    }
+
+                    return string.Empty;
+                }
+                catch (Exception ex) when (attempt < maxRetries && (ex is HttpRequestException || ex is TaskCanceledException || ex.Message.Contains("Rate Limit")))
+                {
+                    _logger.LogWarning("Błąd połączenia z Google AI Studio: {Message}. Próba {Attempt}/{Max}. Czekam {Delay}ms...", ex.Message, attempt + 1, maxRetries + 1, delayMs);
+                    await Task.Delay(delayMs, cancellationToken);
+                    delayMs *= 2;
                 }
             }
 
