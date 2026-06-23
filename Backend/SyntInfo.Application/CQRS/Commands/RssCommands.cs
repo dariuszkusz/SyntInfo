@@ -9,7 +9,8 @@ namespace SyntInfo.Application.CQRS.Commands
         DateTime PublishedAt,
         Guid SourceId,
         Domain.Entities.SourceRegion Region,
-        List<string>? AdditionalUrls = null);
+        List<string>? AdditionalUrls = null,
+        Guid? ExistingArticleId = null);
 
     public record ClearAllArticlesCommand();
 }

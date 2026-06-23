@@ -103,23 +103,46 @@ namespace SyntInfo.Application.CQRS.Handlers
                     }
                 }
 
-                var article = new NewsArticle
+                NewsArticle? article = null;
+                if (command.ExistingArticleId.HasValue)
                 {
-                    Title = displayTitle,
-                    OriginalTitle = command.Title,
-                    SummaryText = essence,
-                    PublishedAt = command.PublishedAt,
-                    SourceUrls = urls,
-                    Region = command.Region,
-                    Category = category,
-                    Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null,
-                    IsActive = true,
-                    DeepContent = factsJson // Zapisujemy ustrukturyzowane fakty z Kroku 1
-                };
+                    article = await _uow.Repository<NewsArticle>().Query()
+                        .FirstOrDefaultAsync(a => a.Id == command.ExistingArticleId.Value, safeToken);
+                }
 
-                await _uow.Repository<NewsArticle>().AddAsync(article, safeToken);
-                await _uow.SaveChangesAsync(safeToken); // Wykonuje wszystko (kategoria + artykuł) w jednej transakcji
-                _logger.LogInformation("Zapisano przetworzony artykuł (OpenRouter Pipeline): {Title}", displayTitle);
+                if (article != null)
+                {
+                    article.Title = displayTitle;
+                    article.SummaryText = essence;
+                    article.SourceUrls = urls;
+                    article.Category = category;
+                    article.Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null;
+                    article.DeepContent = factsJson;
+                    article.IsActive = true;
+                    
+                    _uow.Repository<NewsArticle>().Update(article);
+                    _logger.LogInformation("Zaktualizowano istniejący artykuł po klastrowaniu semantycznym: {Title}", displayTitle);
+                }
+                else
+                {
+                    article = new NewsArticle
+                    {
+                        Title = displayTitle,
+                        OriginalTitle = command.Title,
+                        SummaryText = essence,
+                        PublishedAt = command.PublishedAt,
+                        SourceUrls = urls,
+                        Region = command.Region,
+                        Category = category,
+                        Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null,
+                        IsActive = true,
+                        DeepContent = factsJson
+                    };
+                    await _uow.Repository<NewsArticle>().AddAsync(article, safeToken);
+                    _logger.LogInformation("Zapisano nowy artykuł (OpenRouter Pipeline): {Title}", displayTitle);
+                }
+
+                await _uow.SaveChangesAsync(safeToken);
             }
             catch (Exception ex)
             {
