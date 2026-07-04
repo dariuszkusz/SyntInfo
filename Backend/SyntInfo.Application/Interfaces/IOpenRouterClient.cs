@@ -15,7 +15,7 @@ namespace SyntInfo.Application.Interfaces
         /// <summary>
         /// Wybiera najważniejsze artykuły z listy.
         /// </summary>
-        Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, CancellationToken cancellationToken = default);
+        Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, Domain.Entities.SourceRegion region, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Generuje wektory (embeddings) dla tekstu.

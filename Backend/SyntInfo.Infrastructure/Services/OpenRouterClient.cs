@@ -15,6 +15,7 @@ namespace SyntInfo.Infrastructure.Services
         private readonly string _analystModel;
         private readonly string _editorModel;
         private readonly string _fallbackModel;
+        private readonly string _embeddingModel;
 
         // Rate limiting for :free models
         private static readonly SemaphoreSlim _rateLimiter = new SemaphoreSlim(1, 1);
@@ -29,6 +30,7 @@ namespace SyntInfo.Infrastructure.Services
             _analystModel = configuration["OpenRouter:AnalystModel"] ?? "qwen/qwen-2.5-72b-instruct:free";
             _editorModel = configuration["OpenRouter:EditorModel"] ?? "mistralai/mistral-small-24b-instruct-2501:free";
             _fallbackModel = configuration["OpenRouter:FallbackModel"] ?? "google/gemini-2.0-flash-lite-preview-02-05:free";
+            _embeddingModel = configuration["OpenRouter:EmbeddingModel"] ?? "openai/text-embedding-3-small";
 
             var baseUrl = configuration["OpenRouter:BaseUrl"] ?? "https://openrouter.ai/api/v1/";
             if (!baseUrl.EndsWith("/")) baseUrl += "/";
@@ -71,9 +73,10 @@ namespace SyntInfo.Infrastructure.Services
             return await CallOpenRouterWithRetryAsync(_editorModel, systemPrompt, factsJson, true, cancellationToken);
         }
 
-        public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, CancellationToken cancellationToken = default)
+        public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, Domain.Entities.SourceRegion region, CancellationToken cancellationToken = default)
         {
-            var systemPrompt = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, znaczeniem międzynarodowym/krajowym i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy.";
+            string regionCriteria = region == Domain.Entities.SourceRegion.Poland ? "o znaczeniu dla obywatela Polski" : "znaczeniem międzynarodowym";
+            var systemPrompt = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, {regionCriteria} i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy.";
 
             _logger.LogInformation("Wybór najważniejszych artykułów za pomocą modelu {Model}", _analystModel);
             var responseContent = await CallOpenRouterWithRetryAsync(_analystModel, systemPrompt, articlesListJson, true, cancellationToken);
@@ -111,7 +114,7 @@ namespace SyntInfo.Infrastructure.Services
                 try
                 {
                     var response = await CallOpenRouterAsync(currentModel, systemPrompt, userPrompt, forceJson, cancellationToken);
-                    
+
                     // Validacja JSON jesli wymuszony
                     if (forceJson && string.IsNullOrWhiteSpace(response))
                     {
@@ -124,7 +127,7 @@ namespace SyntInfo.Infrastructure.Services
                 {
                     bool isRateLimit = ex is HttpRequestException hrex && hrex.StatusCode == System.Net.HttpStatusCode.TooManyRequests;
                     bool isTimeout = ex.Message.Contains("Timeout") || ex is TaskCanceledException;
-                    
+
                     _logger.LogWarning("Błąd modelu {Model} (Próba {Current}/{Max}): {Error}", currentModel, i + 1, maxRetries + 1, ex.Message);
 
                     // Jesli to ostatnia proba lub powazny blad, a nie jestesmy jeszcze na fallbacku - przelacz na fallback
@@ -192,7 +195,7 @@ namespace SyntInfo.Infrastructure.Services
                 }
 
                 var result = await response.Content.ReadFromJsonAsync<OpenAIChatCompletionResponse>(cancellationToken: cancellationToken);
-                
+
                 if (result?.Choices == null || result.Choices.Count == 0)
                 {
                     _logger.LogWarning("Model {Model} zwrócił pustą listę Choices.", model);
@@ -228,7 +231,7 @@ namespace SyntInfo.Infrastructure.Services
                     {
                         var request = new
                         {
-                            model = "openai/text-embedding-3-small",
+                            model = _embeddingModel,
                             input = text
                         };
 
@@ -289,7 +292,7 @@ namespace SyntInfo.Infrastructure.Services
             {
                 var response = await _httpClient.GetAsync("key", cancellationToken);
                 var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                
+
                 if (response.IsSuccessStatusCode)
                 {
                     _logger.LogInformation("OpenRouter Key Usage: {Content}", content);
@@ -298,7 +301,7 @@ namespace SyntInfo.Infrastructure.Services
                 {
                     _logger.LogWarning("Nie udało się pobrać informacji o użyciu klucza: {StatusCode}", response.StatusCode);
                 }
-                
+
                 return content;
             }
             catch (Exception ex)

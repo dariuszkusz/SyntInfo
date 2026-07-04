@@ -80,7 +80,7 @@ namespace SyntInfo.Infrastructure.Services
 
             return Array.Empty<float>();
         }
-        public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, CancellationToken cancellationToken = default)
+        public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, Domain.Entities.SourceRegion region, CancellationToken cancellationToken = default)
         {
             if (_useMock)
             {
@@ -88,12 +88,13 @@ namespace SyntInfo.Infrastructure.Services
                 return new List<int> { 0, 1, 2, 3, 4 };
             }
 
+            string regionCriteria = region == Domain.Entities.SourceRegion.Poland ? "o znaczeniu dla obywatela Polski" : "znaczeniem międzynarodowym";
             var request = new
             {
                 model = _modelName,
                 messages = new[]
                 {
-                    new { role = "system", content = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, znaczeniem międzynarodowym/krajowym i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy." },
+                    new { role = "system", content = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, {regionCriteria} i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy." },
                     new { role = "user", content = articlesListJson }
                 },
                 temperature = 0.1,

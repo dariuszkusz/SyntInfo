@@ -5,7 +5,7 @@ namespace SyntInfo.Application.Interfaces
         /// <summary>
         /// Krok 1: Analityk - Wybiera najważniejsze artykuły z listy.
         /// </summary>
-        Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, CancellationToken cancellationToken = default);
+        Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, SyntInfo.Domain.Entities.SourceRegion region, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Krok 1: Analityk - Generuje ustrukturyzowaną listę faktów (JSON) na podstawie treści i danych z wyszukiwarki.
