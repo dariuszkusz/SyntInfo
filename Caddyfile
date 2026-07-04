@@ -3,7 +3,7 @@
 # oraz przekieruje cały ruch z HTTP (port 80) na HTTPS (port 443).
 
 www.infoskrot.pl {
-    redir https://infoskrot.pl{uri}
+    redir https://infoskrot.pl{uri} 301
 }
 
 infoskrot.pl {
