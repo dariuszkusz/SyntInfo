@@ -11,7 +11,6 @@ using Wolverine.Attributes;
 using SyntInfo.Application.Interfaces;
 using SyntInfo.Application.Models.Tavily;
 using System.Net.Http.Json;
-using Pgvector;
 using Pgvector.EntityFrameworkCore;
 
 namespace SyntInfo.Application.CQRS.Handlers
@@ -312,7 +311,7 @@ namespace SyntInfo.Application.CQRS.Handlers
                 var jsonStr = JsonSerializer.Serialize(selectionList);
                 var prompt = $"Analizujesz newsy dla regionu {region}. Z poniższej listy JSON wybierz DOKŁADNIE {maxPerRegion} najważniejszych newsów. Zwróć tylko tablicę numerów index, np. [1, 5, 12].\n\n{jsonStr}";
 
-                var selectedIndexes = await _googleAiStudioClient.SelectTopArticlesIndexesAsync(prompt, maxPerRegion, cancellationToken);
+                var selectedIndexes = await _googleAiStudioClient.SelectTopArticlesIndexesAsync(prompt, maxPerRegion, region, cancellationToken);
 
                 if (selectedIndexes == null || !selectedIndexes.Any())
                 {
@@ -351,9 +350,9 @@ namespace SyntInfo.Application.CQRS.Handlers
 
                 // Szukamy w bazie artykułów z tego samego dnia o podobieństwie > 0.82 (CosineDistance < 0.18)
                 var similarDbArticles = await _uow.Repository<NewsArticle>().Query()
-                    .Where(a => a.Embedding != null 
-                             && a.PublishedAt >= startOfDay 
-                             && a.PublishedAt < endOfDay 
+                    .Where(a => a.Embedding != null
+                             && a.PublishedAt >= startOfDay
+                             && a.PublishedAt < endOfDay
                              && a.Embedding.CosineDistance(targetVector) < 0.18)
                     .ToListAsync(cancellationToken);
 

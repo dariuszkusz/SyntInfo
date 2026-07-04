@@ -24,24 +24,25 @@ namespace SyntInfo.Infrastructure.Services
             _modelName = configuration["GoogleAiStudio:Model"] ?? "gemini-1.5-flash-lite";
         }
 
-        public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, CancellationToken cancellationToken = default)
+        public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, Domain.Entities.SourceRegion region, CancellationToken cancellationToken = default)
         {
-            var systemPrompt = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, znaczeniem międzynarodowym/krajowym i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy.";
+            string regionCriteria = region == Domain.Entities.SourceRegion.Poland ? "o znaczeniu dla obywatela Polski" : "znaczeniem międzynarodowym";
+            var systemPrompt = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, {regionCriteria} i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy.";
 
             try
             {
                 if (string.IsNullOrWhiteSpace(_apiKey) || _apiKey == "PLACEHOLDER_GOOGLE_KEY")
                 {
-                    return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, cancellationToken);
+                    return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, region, cancellationToken);
                 }
 
                 _logger.LogInformation("Krok 1: Wybór artykułów za pomocą Google AI Studio (Model: {Model})", _modelName);
-                
+
                 var responseContent = await CallGeminiAsync(systemPrompt, articlesListJson, true, cancellationToken);
-                
+
                 if (string.IsNullOrWhiteSpace(responseContent))
                 {
-                    return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, cancellationToken);
+                    return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, region, cancellationToken);
                 }
 
                 using var doc = JsonDocument.Parse(responseContent);
@@ -58,7 +59,7 @@ namespace SyntInfo.Infrastructure.Services
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Błąd w GoogleAiStudioClient.SelectTopArticlesIndexesAsync. Przełączanie na OpenRouter.");
-                return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, cancellationToken);
+                return await _openRouterClient.SelectTopArticlesIndexesAsync(articlesListJson, expectedCount, region, cancellationToken);
             }
 
             return new List<int>();
@@ -132,8 +133,8 @@ namespace SyntInfo.Infrastructure.Services
                 },
                 contents = new[]
                 {
-                    new 
-                    { 
+                    new
+                    {
                         role = "user",
                         parts = new[] { new { text = userPrompt } }
                     }
