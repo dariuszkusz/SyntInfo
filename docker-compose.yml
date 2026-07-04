@@ -36,7 +36,7 @@ services:
       - OpenRouter__ApiKey=${OPENROUTER_API_KEY}
       - Search__TavilyApiKey=${TAVILY_API_KEY}
       - GoogleAiStudio__ApiKey=${PLACEHOLDER_GOOGLE_KEY}
-      - Serilog__WriteTo__1__Args__path=/app/logs/log-.txt
+      - Serilog__WriteTo__1__Args__path=${SERILOG_PATH:-/app/logs/log-.txt}
     depends_on:
       - db
     networks:
