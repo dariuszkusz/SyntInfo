@@ -67,7 +67,8 @@ namespace SyntInfo.Infrastructure.Services
                                         "2. PODSUMOWANIE: Stwórz 3-4 konkretne akapity (łącznie 400-800 znaków).\n" +
                                         "3. KATEGORIA: Przypisz jedną kategorię (np. BIZNES, POLITYKA, TECH, ŚWIAT, PL).\n" +
                                         "4. FORMAT: Zwróć WYŁĄCZNIE czysty, poprawny obiekt JSON: {\"title\": \"...\", \"essence\": \"...\", \"category\": \"...\"}.\n" +
-                                        "Ważne: Wewnątrz stringów używaj wyłącznie apostrofów (') zamiast cudzysłowów (\") lub upewnij się, że każdy cudzysłów jest poprawnie eskapowany (\\\").";
+                                        "5. JĘZYK: Odpowiedź MUSI być w języku polskim, niezależnie od języka tekstu źródłowego.\n" +
+                                        "Ważne: Wynik musi być poprawnym JSON-em z podwójnymi cudzysłowami (\"). Ewentualne cudzysłowy wewnątrz tekstu muszą być poprawnie eskapowane (\\\"). Nie używaj apostrofów jako zamienników podwójnych cudzysłowów w strukturze JSON.";
 
             _logger.LogInformation("Krok 2: Generowanie podsumowania za pomocą modelu {Model}", _editorModel);
             return await CallOpenRouterWithRetryAsync(_editorModel, systemPrompt, factsJson, true, cancellationToken);
