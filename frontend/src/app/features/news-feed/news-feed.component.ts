@@ -4,11 +4,12 @@ import { NewsStore } from '../../state/news.store';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
 import { flagPl } from '@ng-icons/flag-icons';
 import { lucideGlobe } from '@ng-icons/lucide';
+import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffee-button/buy-me-coffee-button.component';
 
 @Component({
   selector: 'app-news-feed',
   standalone: true,
-  imports: [CommonModule, NgIconComponent],
+  imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent],
   providers: [provideIcons({ flagPl, lucideGlobe })],
   template: `
     <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
@@ -27,6 +28,7 @@ import { lucideGlobe } from '@ng-icons/lucide';
             </div>
           </div>
           <div class="flex items-center space-x-4">
+            <app-buy-me-coffee-button></app-buy-me-coffee-button>
             @if (isDevMode) {
               <button 
                 (click)="store.syncNews()"
@@ -142,6 +144,9 @@ import { lucideGlobe } from '@ng-icons/lucide';
       <!-- Footer -->
       <footer class="bg-white border-t border-aux1/50 py-8 px-4 mt-auto">
         <div class="max-w-4xl mx-auto text-center space-y-3">
+          <div class="flex justify-center mb-3">
+            <app-buy-me-coffee-button></app-buy-me-coffee-button>
+          </div>
           <p class="text-xs font-bold text-aux3">
             Info Skrót - Twój codzienny skrót informacji i wiadomości w pigułce.
           </p>
