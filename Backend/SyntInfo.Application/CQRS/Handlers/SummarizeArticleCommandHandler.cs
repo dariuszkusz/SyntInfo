@@ -82,11 +82,11 @@ namespace SyntInfo.Application.CQRS.Handlers
                     essence = essence.Trim();
                 }
 
-                // Rozstrzygnięcie zdjęcia dla artykułu: RSS -> Tavily -> Tematyczny fallback
+                // Rozstrzygnięcie zdjęcia dla artykułu: RSS -> Tavily -> og:image z artykułu źródłowego
                 string? resolvedImageUrl = !string.IsNullOrWhiteSpace(command.ImageUrl) ? command.ImageUrl : searchResult.ImageUrl;
-                if (string.IsNullOrWhiteSpace(resolvedImageUrl))
+                if (string.IsNullOrWhiteSpace(resolvedImageUrl) && !string.IsNullOrWhiteSpace(command.Url) && !command.Url.Contains("google.com/rss"))
                 {
-                    resolvedImageUrl = GetFallbackImageUrl(categoryName);
+                    resolvedImageUrl = await TryExtractOgImageAsync(command.Url, safeToken);
                 }
 
                 // KROK 3: Wektory (pgvector) na podstawie GOTOWEGO streszczenia (OpenRouter)
@@ -219,27 +219,52 @@ namespace SyntInfo.Application.CQRS.Handlers
             return cleaned;
         }
 
-        public static string GetFallbackImageUrl(string categoryName)
+        private static async Task<string?> TryExtractOgImageAsync(string url, CancellationToken cancellationToken)
         {
-            var cat = (categoryName ?? string.Empty).ToUpperInvariant();
-            if (cat.Contains("BIZNES") || cat.Contains("GOSPODARKA") || cat.Contains("FINANSE") || cat.Contains("BUSINESS") || cat.Contains("EKONOMIA"))
-                return "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80";
-            if (cat.Contains("TECH") || cat.Contains("NAUKA") || cat.Contains("AI") || cat.Contains("CYFRYZACJA"))
-                return "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80";
-            if (cat.Contains("POLITYKA") || cat.Contains("SEJM") || cat.Contains("RZĄD") || cat.Contains("WYBORY") || cat.Contains("PL"))
-                return "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop&q=80";
-            if (cat.Contains("ŚWIAT") || cat.Contains("WORLD") || cat.Contains("GLOBAL") || cat.Contains("WOJNA") || cat.Contains("DYPLOMACJA"))
-                return "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=800&auto=format&fit=crop&q=80";
-            if (cat.Contains("SPORT") || cat.Contains("PIŁKA") || cat.Contains("MECZ"))
-                return "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&auto=format&fit=crop&q=80";
-            if (cat.Contains("ZDROWIE") || cat.Contains("MEDYCYNA") || cat.Contains("HEALTH"))
-                return "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=800&auto=format&fit=crop&q=80";
-            if (cat.Contains("KULTURA") || cat.Contains("SZTUKA") || cat.Contains("FILM") || cat.Contains("ROZRYWKA"))
-                return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80";
-            if (cat.Contains("KLIMAT") || cat.Contains("POGODA") || cat.Contains("ŚRODOWISKO"))
-                return "https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&auto=format&fit=crop&q=80";
+            try
+            {
+                using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(5);
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+                client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 
-            return "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop&q=80";
+                using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                if (!response.IsSuccessStatusCode) return null;
+
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var reader = new StreamReader(stream);
+
+                // Odczytaj nagłówek HTML (pierwsze 64 KB)
+                char[] buffer = new char[65536];
+                int read = await reader.ReadAsync(buffer, 0, buffer.Length);
+                if (read <= 0) return null;
+
+                var htmlHead = new string(buffer, 0, read);
+                var match = System.Text.RegularExpressions.Regex.Match(htmlHead, @"<meta[^>]+property=[""']og:image[""'][^>]+content=[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (!match.Success)
+                {
+                    match = System.Text.RegularExpressions.Regex.Match(htmlHead, @"<meta[^>]+content=[""']([^""']+)[""'][^>]+property=[""']og:image[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                }
+                if (!match.Success)
+                {
+                    match = System.Text.RegularExpressions.Regex.Match(htmlHead, @"<meta[^>]+name=[""']twitter:image[""'][^>]+content=[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                }
+
+                if (match.Success)
+                {
+                    var imgUrl = match.Groups[1].Value;
+                    if (imgUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return imgUrl;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignoruj błędy przy próbie pobrania og:image
+            }
+
+            return null;
         }
     }
 }
