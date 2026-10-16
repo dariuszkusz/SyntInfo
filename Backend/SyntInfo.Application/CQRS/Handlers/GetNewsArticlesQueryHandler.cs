@@ -45,14 +45,6 @@ namespace SyntInfo.Application.CQRS.Handlers
                 })
                 .ToListAsync(cancellationToken);
 
-            foreach (var art in articles)
-            {
-                if (string.IsNullOrWhiteSpace(art.ImageUrl))
-                {
-                    art.ImageUrl = SummarizeArticleCommandHandler.GetFallbackImageUrl(art.CategoryName);
-                }
-            }
-
             return articles;
         }
     }
