@@ -11,5 +11,14 @@ namespace SyntInfo.Infrastructure.Services
             // Zwracanie sztucznych wyników z wyszukiwarki do testów.
             return Task.FromResult($"[MOCK SEARCH RESULT] Specjalne pogłębione tło i analiza: Według zewnętrznych wyszukiwań na temat: '{query}', sytuacja rozwija się dynamicznie. Służby przekazały nowe informacje, jest to jedno z ważniejszych zdarzeń w regionie. Pamiętaj, aby uwzględnić ten kontekst w ostatecznym podsumowaniu merytorycznym.");
         }
+
+        public Task<SearchResultInfo> SearchDetailedWithImageAsync(string query, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new SearchResultInfo
+            {
+                Content = $"[MOCK SEARCH RESULT] Specjalne pogłębione tło i analiza: Według zewnętrznych wyszukiwań na temat: '{query}', sytuacja rozwija się dynamicznie. Służby przekazały nowe informacje, jest to jedno z ważniejszych zdarzeń w regionie. Pamiętaj, aby uwzględnić ten kontekst w ostatecznym podsumowaniu merytorycznym.",
+                ImageUrl = null
+            });
+        }
     }
 }

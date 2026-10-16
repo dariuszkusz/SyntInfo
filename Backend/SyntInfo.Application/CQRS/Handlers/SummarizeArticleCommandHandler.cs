@@ -42,8 +42,9 @@ namespace SyntInfo.Application.CQRS.Handlers
             await _aiSemaphore.WaitAsync(safeToken);
             try
             {
-                // KROK 0: Pobranie kontekstu z Tavily
-                var searchResults = await _searchService.SearchDetailedInfoAsync(command.Title, safeToken);
+                // KROK 0: Pobranie kontekstu z Tavily (wraz z ewentualnym zdjęciem)
+                var searchResult = await _searchService.SearchDetailedWithImageAsync(command.Title, safeToken);
+                var searchResults = searchResult.Content;
 
                 // KROK 1: Analityk (Google AI Studio z fallbackiem na OpenRouter) - Fakty JSON -> DeepContent
                 var factsJsonRaw = await _googleAiStudioClient.GenerateFactsAsync(command.Content, searchResults, safeToken);
@@ -64,19 +65,28 @@ namespace SyntInfo.Application.CQRS.Handlers
 
                     if (structuredContent != null && !string.IsNullOrWhiteSpace(structuredContent.Title))
                     {
-                        displayTitle = structuredContent.Title;
-                        essence = structuredContent.Essence;
-                        categoryName = structuredContent.Category ?? "General";
+                        displayTitle = structuredContent.Title.Trim();
+                        essence = structuredContent.Essence?.Trim() ?? string.Empty;
+                        categoryName = structuredContent.Category?.Trim() ?? "General";
                     }
                     else
                     {
                         essence = editorJson.Length > 4500 ? editorJson.Substring(0, 4500) : editorJson;
+                        essence = essence.Trim();
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Błąd parsowania JSON z Redaktora. Raw: {Raw}", editorResponseRaw);
                     essence = editorJson.Length > 4500 ? editorJson.Substring(0, 4500) : editorJson;
+                    essence = essence.Trim();
+                }
+
+                // Rozstrzygnięcie zdjęcia dla artykułu: RSS -> Tavily -> Tematyczny fallback
+                string? resolvedImageUrl = !string.IsNullOrWhiteSpace(command.ImageUrl) ? command.ImageUrl : searchResult.ImageUrl;
+                if (string.IsNullOrWhiteSpace(resolvedImageUrl))
+                {
+                    resolvedImageUrl = GetFallbackImageUrl(categoryName);
                 }
 
                 // KROK 3: Wektory (pgvector) na podstawie GOTOWEGO streszczenia (OpenRouter)
@@ -119,6 +129,10 @@ namespace SyntInfo.Application.CQRS.Handlers
                     article.Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null;
                     article.DeepContent = factsJson;
                     article.IsActive = true;
+                    if (!string.IsNullOrWhiteSpace(resolvedImageUrl))
+                    {
+                        article.ImageUrl = resolvedImageUrl;
+                    }
                     
                     _uow.Repository<NewsArticle>().Update(article);
                     _logger.LogInformation("Zaktualizowano istniejący artykuł po klastrowaniu semantycznym: {Title}", displayTitle);
@@ -128,7 +142,7 @@ namespace SyntInfo.Application.CQRS.Handlers
                     article = new NewsArticle
                     {
                         Title = displayTitle,
-                        OriginalTitle = command.Title,
+                        OriginalTitle = command.Title.Trim(),
                         SummaryText = essence,
                         PublishedAt = command.PublishedAt,
                         SourceUrls = urls,
@@ -136,7 +150,8 @@ namespace SyntInfo.Application.CQRS.Handlers
                         Category = category,
                         Embedding = embedding.Length > 0 ? new Pgvector.Vector(embedding) : null,
                         IsActive = true,
-                        DeepContent = factsJson
+                        DeepContent = factsJson,
+                        ImageUrl = resolvedImageUrl
                     };
                     await _uow.Repository<NewsArticle>().AddAsync(article, safeToken);
                     _logger.LogInformation("Zapisano nowy artykuł (OpenRouter Pipeline): {Title}", displayTitle);
@@ -202,6 +217,29 @@ namespace SyntInfo.Application.CQRS.Handlers
             }
 
             return cleaned;
+        }
+
+        public static string GetFallbackImageUrl(string categoryName)
+        {
+            var cat = (categoryName ?? string.Empty).ToUpperInvariant();
+            if (cat.Contains("BIZNES") || cat.Contains("GOSPODARKA") || cat.Contains("FINANSE") || cat.Contains("BUSINESS") || cat.Contains("EKONOMIA"))
+                return "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80";
+            if (cat.Contains("TECH") || cat.Contains("NAUKA") || cat.Contains("AI") || cat.Contains("CYFRYZACJA"))
+                return "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80";
+            if (cat.Contains("POLITYKA") || cat.Contains("SEJM") || cat.Contains("RZĄD") || cat.Contains("WYBORY") || cat.Contains("PL"))
+                return "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop&q=80";
+            if (cat.Contains("ŚWIAT") || cat.Contains("WORLD") || cat.Contains("GLOBAL") || cat.Contains("WOJNA") || cat.Contains("DYPLOMACJA"))
+                return "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=800&auto=format&fit=crop&q=80";
+            if (cat.Contains("SPORT") || cat.Contains("PIŁKA") || cat.Contains("MECZ"))
+                return "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&auto=format&fit=crop&q=80";
+            if (cat.Contains("ZDROWIE") || cat.Contains("MEDYCYNA") || cat.Contains("HEALTH"))
+                return "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=800&auto=format&fit=crop&q=80";
+            if (cat.Contains("KULTURA") || cat.Contains("SZTUKA") || cat.Contains("FILM") || cat.Contains("ROZRYWKA"))
+                return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80";
+            if (cat.Contains("KLIMAT") || cat.Contains("POGODA") || cat.Contains("ŚRODOWISKO"))
+                return "https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&auto=format&fit=crop&q=80";
+
+            return "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop&q=80";
         }
     }
 }

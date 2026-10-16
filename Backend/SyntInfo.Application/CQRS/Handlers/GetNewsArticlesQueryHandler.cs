@@ -34,15 +34,24 @@ namespace SyntInfo.Application.CQRS.Handlers
                 .Select(a => new NewsArticleDto
                 {
                     Id = a.Id,
-                    Title = a.Title,
-                    OriginalTitle = a.OriginalTitle,
-                    SummaryText = a.SummaryText,
+                    Title = a.Title.Trim(),
+                    OriginalTitle = a.OriginalTitle.Trim(),
+                    SummaryText = a.SummaryText.Trim(),
                     PublishedAt = a.PublishedAt,
                     SourceUrls = a.SourceUrls,
                     CategoryName = a.Category != null ? a.Category.Name : "General",
-                    Region = a.Region
+                    Region = a.Region,
+                    ImageUrl = a.ImageUrl
                 })
                 .ToListAsync(cancellationToken);
+
+            foreach (var art in articles)
+            {
+                if (string.IsNullOrWhiteSpace(art.ImageUrl))
+                {
+                    art.ImageUrl = SummarizeArticleCommandHandler.GetFallbackImageUrl(art.CategoryName);
+                }
+            }
 
             return articles;
         }

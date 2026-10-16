@@ -16,6 +16,7 @@ export interface NewsArticle {
   sourceUrls: string[];
   categoryName: string;
   region: SourceRegion;
+  imageUrl?: string;
 }
 
 export interface TopNewsResponse {

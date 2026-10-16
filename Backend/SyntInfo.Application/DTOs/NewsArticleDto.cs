@@ -12,5 +12,6 @@ namespace SyntInfo.Application.DTOs
         public List<string> SourceUrls { get; set; } = new();
         public string CategoryName { get; set; } = string.Empty;
         public SourceRegion Region { get; set; }
+        public string? ImageUrl { get; set; }
     }
 }

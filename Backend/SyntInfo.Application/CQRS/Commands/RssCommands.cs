@@ -10,7 +10,8 @@ namespace SyntInfo.Application.CQRS.Commands
         Guid SourceId,
         Domain.Entities.SourceRegion Region,
         List<string>? AdditionalUrls = null,
-        Guid? ExistingArticleId = null);
+        Guid? ExistingArticleId = null,
+        string? ImageUrl = null);
 
     public record ClearAllArticlesCommand();
 }
