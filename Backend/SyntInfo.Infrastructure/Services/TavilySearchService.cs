@@ -21,10 +21,16 @@ namespace SyntInfo.Infrastructure.Services
 
         public async Task<string> SearchDetailedInfoAsync(string query, CancellationToken cancellationToken = default)
         {
+            var res = await SearchDetailedWithImageAsync(query, cancellationToken);
+            return res.Content;
+        }
+
+        public async Task<SearchResultInfo> SearchDetailedWithImageAsync(string query, CancellationToken cancellationToken = default)
+        {
             if (string.IsNullOrWhiteSpace(_apiKey) || _apiKey.Contains("YOUR-KEY"))
             {
                 _logger.LogWarning("Tavily API Key is missing or default. Returning fallback message.");
-                return "[WARNING] Tavily API Key not configured. Detailed search results are not available.";
+                return new SearchResultInfo { Content = "[WARNING] Tavily API Key not configured. Detailed search results are not available." };
             }
 
             try
@@ -35,6 +41,7 @@ namespace SyntInfo.Infrastructure.Services
                     query = query,
                     search_depth = "advanced",
                     include_answer = true,
+                    include_images = true,
                     max_results = 5
                 };
 
@@ -44,30 +51,38 @@ namespace SyntInfo.Infrastructure.Services
                 {
                     var error = await response.Content.ReadAsStringAsync(cancellationToken);
                     _logger.LogError("Tavily API error: {StatusCode}. Details: {Error}", response.StatusCode, error);
-                    return $"[ERROR] Search failed with status {response.StatusCode}";
+                    return new SearchResultInfo { Content = $"[ERROR] Search failed with status {response.StatusCode}" };
                 }
 
                 var result = await response.Content.ReadFromJsonAsync<TavilySearchResponse>(cancellationToken: cancellationToken);
 
                 if (result == null || (string.IsNullOrEmpty(result.Answer) && (result.Results == null || !result.Results.Any())))
                 {
-                    return "No detailed search results found.";
+                    return new SearchResultInfo { Content = "No detailed search results found." };
                 }
 
-                // If Tavily provided a direct AI answer, use it as it's already summarized
+                string? imageUrl = result.Images?.FirstOrDefault(img => !string.IsNullOrWhiteSpace(img) && (img.StartsWith("http://") || img.StartsWith("https://")));
+
+                string content;
                 if (!string.IsNullOrEmpty(result.Answer))
                 {
-                    return result.Answer;
+                    content = result.Answer;
+                }
+                else
+                {
+                    content = string.Join("\n\n", result.Results.Select(r => $"Title: {r.Title}\nContent: {r.Content}"));
                 }
 
-                // Otherwise, combine results
-                var combinedResults = string.Join("\n\n", result.Results.Select(r => $"Title: {r.Title}\nContent: {r.Content}"));
-                return combinedResults;
+                return new SearchResultInfo
+                {
+                    Content = content,
+                    ImageUrl = imageUrl
+                };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Exception during Tavily search for query: {Query}", query);
-                return $"[EXCEPTION] Search failed: {ex.Message}";
+                return new SearchResultInfo { Content = $"[EXCEPTION] Search failed: {ex.Message}" };
             }
         }
     }

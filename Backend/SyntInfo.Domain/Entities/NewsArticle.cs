@@ -23,4 +23,5 @@ public class NewsArticle
 
     public bool IsActive { get; set; } = true;
     public string? DeepContent { get; set; }
+    public string? ImageUrl { get; set; }
 }
