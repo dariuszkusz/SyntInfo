@@ -139,6 +139,7 @@ namespace SyntInfo.Application.CQRS.Handlers
                         {
                             var content = !string.IsNullOrWhiteSpace(item.Description) ? item.Description : item.Content;
                             if (string.IsNullOrWhiteSpace(content)) content = item.Title;
+                            var imageUrl = ExtractImageUrl(item);
 
                             newArticlesToProcess.Add(new SummarizeArticleCommand(
                                 item.Title,
@@ -146,7 +147,10 @@ namespace SyntInfo.Application.CQRS.Handlers
                                 url,
                                 item.PublishingDate ?? DateTime.UtcNow,
                                 source.Id,
-                                source.Region
+                                source.Region,
+                                null,
+                                null,
+                                imageUrl
                             ));
                         }
                     }
@@ -474,6 +478,7 @@ namespace SyntInfo.Application.CQRS.Handlers
             }
 
             var consolidatedTitle = cluster.ExistingArticle != null ? cluster.ExistingArticle.Title : representative.Title;
+            var primaryImageUrl = cluster.ExistingArticle?.ImageUrl ?? cluster.Candidates.FirstOrDefault(c => !string.IsNullOrEmpty(c.ImageUrl))?.ImageUrl;
 
             return new SummarizeArticleCommand(
                 consolidatedTitle,
@@ -483,8 +488,53 @@ namespace SyntInfo.Application.CQRS.Handlers
                 representative.SourceId,
                 representative.Region,
                 additionalUrls,
-                cluster.ExistingArticle?.Id
+                cluster.ExistingArticle?.Id,
+                primaryImageUrl
             );
+        }
+
+        private static string? ExtractImageUrl(CodeHollow.FeedReader.FeedItem item)
+        {
+            try
+            {
+                if (item.SpecificItem?.Element != null)
+                {
+                    var el = item.SpecificItem.Element;
+                    var enclosure = el.Elements().FirstOrDefault(e => e.Name.LocalName.Equals("enclosure", StringComparison.OrdinalIgnoreCase) && e.Attribute("type")?.Value.StartsWith("image/") == true);
+                    if (enclosure != null)
+                    {
+                        var url = enclosure.Attribute("url")?.Value;
+                        if (!string.IsNullOrWhiteSpace(url)) return url;
+                    }
+
+                    var media = el.Elements().FirstOrDefault(e => (e.Name.LocalName.Equals("content", StringComparison.OrdinalIgnoreCase) || e.Name.LocalName.Equals("thumbnail", StringComparison.OrdinalIgnoreCase)) && (e.Attribute("medium")?.Value == "image" || e.Attribute("url")?.Value.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) == true || e.Attribute("url")?.Value.EndsWith(".png", StringComparison.OrdinalIgnoreCase) == true || e.Attribute("type")?.Value.StartsWith("image/") == true || e.Attribute("url") != null));
+                    if (media != null)
+                    {
+                        var url = media.Attribute("url")?.Value;
+                        if (!string.IsNullOrWhiteSpace(url)) return url;
+                    }
+                }
+
+                var contentToScan = $"{item.Description} {item.Content}";
+                if (!string.IsNullOrWhiteSpace(contentToScan))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(contentToScan, @"<img[^>]+src=[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        var url = match.Groups[1].Value;
+                        if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return url;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Silently ignore extraction issues
+            }
+
+            return null;
         }
 
         private class ArticleCluster
