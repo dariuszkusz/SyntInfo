@@ -152,7 +152,7 @@ import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffe
                     <h2 class="article-title text-xl sm:text-2xl font-bold mb-4 leading-tight text-aux3">
                       {{ article.title }}
                     </h2>
-                    <div class="article-summary text-[15px] leading-relaxed text-aux2 opacity-90 whitespace-pre-wrap tracking-wide">{{ article.summaryText.trim() }}</div>
+                    <div class="article-summary text-[15px] leading-relaxed text-aux2 opacity-90 whitespace-pre-wrap tracking-wide text-justify hyphens-auto">{{ article.summaryText.trim() }}</div>
                   </div>
 
                   <!-- Image Column: 1/3 width on md+ -->
