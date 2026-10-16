@@ -79,6 +79,38 @@ describe('News Feed', () => {
     cy.contains('News from the World').should('be.visible');
   });
 
+  it('should retain user settings after page reload', () => {
+    // 1. Select 'Krajowe' filter
+    cy.get('.region-tab-poland').click();
+    cy.contains('Wiadomość z Polski').should('be.visible');
+    cy.contains('News from the World').should('not.exist');
+    cy.get('.region-tab-poland').should('have.attr', 'aria-pressed', 'true');
+
+    // 2. Reload the page
+    cy.reload();
+    cy.wait('@getTopNews');
+
+    // 3. Verify 'Krajowe' setting remains active after reload
+    cy.get('.region-tab-poland').should('have.attr', 'aria-pressed', 'true');
+    cy.contains('Wiadomość z Polski').should('be.visible');
+    cy.contains('News from the World').should('not.exist');
+
+    // 4. Change setting to 'Świat'
+    cy.get('.region-tab-world').click();
+    cy.contains('News from the World').should('be.visible');
+    cy.contains('Wiadomość z Polski').should('not.exist');
+    cy.get('.region-tab-world').should('have.attr', 'aria-pressed', 'true');
+
+    // 5. Reload again
+    cy.reload();
+    cy.wait('@getTopNews');
+
+    // 6. Verify 'Świat' setting remains active after second reload
+    cy.get('.region-tab-world').should('have.attr', 'aria-pressed', 'true');
+    cy.contains('News from the World').should('be.visible');
+    cy.contains('Wiadomość z Polski').should('not.exist');
+  });
+
   it('should filter by category when category badge is clicked and allow clearing', () => {
     cy.contains('.category-btn', 'Gospodarka').click();
     cy.get('.active-category-chip').should('be.visible');
@@ -91,8 +123,9 @@ describe('News Feed', () => {
     cy.contains('News from the World').should('be.visible');
   });
 
-  it('should display article image', () => {
-    cy.get('.article-image').should('have.length.at.least', 1);
+  it('should render article in a 2/3 text and 1/3 image layout', () => {
+    cy.get('.article-content-col').first().should('have.class', 'md:w-2/3');
+    cy.get('.article-image-col').first().should('have.class', 'md:w-1/3');
     cy.get('.article-image').first().should('be.visible');
   });
 

@@ -145,25 +145,30 @@ import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffe
                   </div>
                 </div>
                 
-                <!-- Title -->
-                <h2 class="article-title text-xl sm:text-2xl font-bold mb-4 leading-tight text-aux3">
-                  {{ article.title }}
-                </h2>
-
-                <!-- Article Image -->
-                @if (article.imageUrl) {
-                  <div class="mb-5 overflow-hidden rounded-2xl bg-aux1/20 border border-black/5 aspect-[16/9] max-h-72 w-full">
-                    <img 
-                      [src]="article.imageUrl" 
-                      [alt]="article.title"
-                      loading="lazy"
-                      (error)="onImageError($event)"
-                      class="article-image w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
+                <!-- Article Body: 2/3 text on left, 1/3 image on right -->
+                <div class="flex flex-col-reverse md:flex-row gap-6 items-start mb-6">
+                  <!-- Text Column: 2/3 width on md+ -->
+                  <div class="article-content-col flex-1 w-full md:w-2/3 flex flex-col">
+                    <h2 class="article-title text-xl sm:text-2xl font-bold mb-4 leading-tight text-aux3">
+                      {{ article.title }}
+                    </h2>
+                    <div class="article-summary text-[15px] leading-relaxed text-aux2 opacity-90 whitespace-pre-wrap tracking-wide">{{ article.summaryText.trim() }}</div>
                   </div>
-                }
-                
-                <!-- Summary Text (fixed leading whitespace) -->
-                <div class="article-summary text-[15px] leading-relaxed text-aux2 opacity-90 mb-6 whitespace-pre-wrap tracking-wide space-y-4">{{ article.summaryText.trim() }}</div>
+
+                  <!-- Image Column: 1/3 width on md+ -->
+                  @if (article.imageUrl) {
+                    <div class="article-image-col w-full md:w-1/3 shrink-0">
+                      <div class="overflow-hidden rounded-2xl bg-aux1/20 border border-black/5 aspect-[4/3] w-full">
+                        <img 
+                          [src]="article.imageUrl" 
+                          [alt]="article.title"
+                          loading="lazy"
+                          (error)="onImageError($event)"
+                          class="article-image w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
+                      </div>
+                    </div>
+                  }
+                </div>
 
                 <!-- Footer: Sources & Essence Tag -->
                 <div class="flex items-center justify-between pt-5 border-t border-aux1/30">
