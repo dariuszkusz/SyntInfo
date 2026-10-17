@@ -89,11 +89,21 @@ builder.Services.AddQuartz(q =>
     var jobKey = new JobKey("RssFetcherJob");
     q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.RssFetcherJob>(opts => opts.WithIdentity(jobKey));
 
-    // Odpalanie 2 razy dziennie (7:00 i 19:00)
+    TimeZoneInfo warsawTimeZone;
+    try
+    {
+        warsawTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
+    }
+    catch (TimeZoneNotFoundException)
+    {
+        warsawTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
+    }
+
+    // Odpalanie 2 razy dziennie (7:00 i 19:00 czasu polskiego)
     q.AddTrigger(opts => opts
         .ForJob(jobKey)
         .WithIdentity("RssFetcherJob-trigger")
-        .WithCronSchedule("0 0 7,19 * * ?")); // O godzinie 7:00 i 19:00 codziennie
+        .WithCronSchedule("0 0 7,19 * * ?", x => x.InTimeZone(warsawTimeZone)));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
