@@ -31,6 +31,7 @@ services:
     container_name: syntinfo_api
     restart: always
     environment:
+      - TZ=Europe/Warsaw
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${POSTGRES_DB:-syntinfo_db};Username=${POSTGRES_USER:-synt_user};Password=${POSTGRES_PASSWORD:-synt_password}
       - OpenRouter__ApiKey=${OPENROUTER_API_KEY}
