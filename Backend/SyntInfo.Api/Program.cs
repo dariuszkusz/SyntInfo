@@ -35,6 +35,9 @@ try
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IOpenRouterClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IGoogleAiStudioClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ISearchService>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<ISocialPostGenerator>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<ITelegramNotificationService>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<ISocialPublisherFactory>();
     });
 
 
@@ -82,6 +85,32 @@ builder.Services.AddHttpClient<IGoogleAiStudioClient, SyntInfo.Infrastructure.Se
 {
     client.Timeout = TimeSpan.FromMinutes(10);
 });
+
+// Rejestracja modułu automatyzacji Social Media & Telegram
+builder.Services.AddHttpClient<IWykopClient, SyntInfo.Infrastructure.Services.WykopClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddHttpClient<IHejtoClient, SyntInfo.Infrastructure.Services.HejtoClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddHttpClient<IFacebookClient, SyntInfo.Infrastructure.Services.FacebookClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddHttpClient<IMailerLiteClient, SyntInfo.Infrastructure.Services.MailerLiteClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.WykopPublisher>();
+builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.HejtoPublisher>();
+builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.FacebookPublisher>();
+builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.NewsletterPublisher>();
+builder.Services.AddScoped<ISocialPostGenerator, SyntInfo.Infrastructure.Services.SocialPostGenerator>();
+builder.Services.AddScoped<ITelegramNotificationService, SyntInfo.Infrastructure.Services.TelegramNotificationService>();
+builder.Services.AddScoped<ISocialPublisherFactory, SyntInfo.Infrastructure.Services.SocialPublisherFactory>();
 
 // Konfiguracja zadań w tle (Quartz)
 builder.Services.AddQuartz(q =>

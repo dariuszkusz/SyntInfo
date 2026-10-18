@@ -26,5 +26,8 @@ public class RssFetcherJob : IJob
 
         // 2. Usuwanie starych newsów (starszych niż 7 dni)
         await _bus.PublishAsync(new CleanupOldArticlesCommand(DaysToKeep: 7));
+
+        // 3. Generowanie szkiców postów na platformy społecznościowe (Telegram bot approval)
+        await _bus.PublishAsync(new CreateSocialPostDraftsCommand());
     }
 }

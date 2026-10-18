@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<NewsArticle> NewsArticles { get; set; } = null!;
     public DbSet<NewsCategory> NewsCategories { get; set; } = null!;
     public DbSet<NewsSource> NewsSources { get; set; } = null!;
+    public DbSet<SocialPostDraft> SocialPostDrafts { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,6 +52,25 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.RssUrl).IsRequired().HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<SocialPostDraft>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Content).IsRequired();
+            entity.Property(e => e.PlatformType).HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+            entity.Property(e => e.ExternalPostId).HasMaxLength(255);
+
+            entity.HasOne(e => e.NewsArticle)
+                  .WithMany()
+                  .HasForeignKey(e => e.NewsArticleId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => new { e.NewsArticleId, e.PlatformType });
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 }

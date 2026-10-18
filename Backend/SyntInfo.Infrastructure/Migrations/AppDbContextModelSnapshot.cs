@@ -19,7 +19,7 @@ namespace SyntInfo.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
@@ -135,6 +135,60 @@ namespace SyntInfo.Infrastructure.Migrations
                     b.ToTable("NewsSources");
                 });
 
+            modelBuilder.Entity("SyntInfo.Domain.Entities.SocialPostDraft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ExternalPostId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid>("NewsArticleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PlatformType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long?>("TelegramMessageId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("NewsArticleId", "PlatformType");
+
+                    b.ToTable("SocialPostDrafts");
+                });
+
             modelBuilder.Entity("SyntInfo.Domain.Entities.NewsArticle", b =>
                 {
                     b.HasOne("SyntInfo.Domain.Entities.NewsCategory", "Category")
@@ -144,6 +198,17 @@ namespace SyntInfo.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("SyntInfo.Domain.Entities.SocialPostDraft", b =>
+                {
+                    b.HasOne("SyntInfo.Domain.Entities.NewsArticle", "NewsArticle")
+                        .WithMany()
+                        .HasForeignKey("NewsArticleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("NewsArticle");
                 });
 #pragma warning restore 612, 618
         }
