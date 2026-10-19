@@ -176,7 +176,7 @@ public class TelegramController : ControllerBase
     /// Wysyła testowy szkic posta bezpośrednio do administratora na Telegram z przyciskami [✅ Opublikuj] i [❌ Odrzuć].
     /// </summary>
     [HttpPost("send-test-draft")]
-    public async Task<IActionResult> SendTestDraft([FromQuery] SocialPlatformType platform = SocialPlatformType.Hejto)
+    public async Task<IActionResult> SendTestDraft([FromQuery] SocialPlatformType platform = SocialPlatformType.Wykop)
     {
         // 1. Sprawdź lub utwórz przykładowy artykuł
         var article = await _uow.Repository<NewsArticle>().Query()
@@ -197,12 +197,12 @@ public class TelegramController : ControllerBase
             await _uow.SaveChangesAsync(HttpContext.RequestAborted);
         }
 
-        // 2. Utwórz szkic posta
+        // 2. Utwórz szkic posta z wyraźnym oznaczeniem testowym
         var draft = new SocialPostDraft
         {
             NewsArticleId = article.Id,
             PlatformType = platform,
-            Content = $"⚡ {article.Title}\n\n{article.SummaryText}\n\n🔗 Czytaj więcej: {article.SourceUrls.FirstOrDefault()}\n#technologia #nauka #syntinfo",
+            Content = $"[TEST - NIE KLIKAĆ]\n⚡ {article.Title}\n\n{article.SummaryText}\n\n🔗 Czytaj więcej: {article.SourceUrls.FirstOrDefault()}\n#technologia #nauka #syntinfo #test",
             Status = SocialPostStatus.Draft,
             CreatedAt = DateTime.UtcNow
         };

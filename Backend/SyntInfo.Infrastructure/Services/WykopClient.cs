@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SyntInfo.Application.Interfaces;
@@ -9,46 +10,127 @@ namespace SyntInfo.Infrastructure.Services;
 
 public class WykopClient : IWykopClient
 {
-    private readonly HttpClient _httpClient;
+    private const string AppTokenCacheKey = "wykop_app_oauth_token";
+    private const string UserTokenCacheKey = "wykop_user_oauth_token";
+    private const string RefreshTokenCacheKey = "wykop_user_refresh_token";
+
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IMemoryCache _memoryCache;
     private readonly IConfiguration _configuration;
     private readonly ILogger<WykopClient> _logger;
 
-    public WykopClient(HttpClient httpClient, IConfiguration configuration, ILogger<WykopClient> logger)
+    public WykopClient(
+        IHttpClientFactory httpClientFactory,
+        IMemoryCache memoryCache,
+        IConfiguration configuration,
+        ILogger<WykopClient> logger)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
+        _memoryCache = memoryCache;
         _configuration = configuration;
         _logger = logger;
+    }
 
-        var baseUrl = _configuration["SocialPlatforms:Wykop:BaseUrl"] ?? "https://wykop.pl/api/v3/";
-        if (!baseUrl.EndsWith("/")) baseUrl += "/";
-        _httpClient.BaseAddress = new Uri(baseUrl);
+    public async Task<string> GetConnectUrlAsync(CancellationToken cancellationToken = default)
+    {
+        var appToken = await GetOrRefreshAppTokenAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(appToken))
+        {
+            throw new InvalidOperationException("Nie udało się pobrać tokenu aplikacji Wykop. Upewnij się, że SocialPlatforms:Wykop:Key oraz SocialPlatforms:Wykop:Secret są skonfigurowane.");
+        }
+
+        var baseUrl = GetBaseUrl();
+        var client = _httpClientFactory.CreateClient("WykopClient");
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(baseUrl), "connect"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", appToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Błąd podczas pobierania connect_url z Wykop API v3 (HTTP {StatusCode}): {Response}", response.StatusCode, responseContent);
+            throw new HttpRequestException($"Wykop GET /connect zwrócił status {response.StatusCode}: {responseContent}");
+        }
+
+        using var doc = JsonDocument.Parse(responseContent);
+        if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("connect_url", out var urlEl))
+        {
+            return urlEl.GetString() ?? string.Empty;
+        }
+
+        throw new InvalidOperationException("Odpowiedź z endpointu /connect nie zawierała pola data.connect_url.");
+    }
+
+    public Task SaveUserTokensAsync(string userToken, string? refreshToken, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userToken))
+        {
+            throw new ArgumentException("UserToken nie może być pusty.", nameof(userToken));
+        }
+
+        // Token użytkownika zazwyczaj ważny jest 24h, zachowajmy w cache
+        _memoryCache.Set(UserTokenCacheKey, userToken.Trim(), TimeSpan.FromHours(23));
+
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+        {
+            _memoryCache.Set(RefreshTokenCacheKey, refreshToken.Trim(), TimeSpan.FromDays(30));
+        }
+
+        _logger.LogInformation("Zapisano token użytkownika Wykop w pamięci podręcznej.");
+        return Task.CompletedTask;
     }
 
     public async Task<string> CreateEntryAsync(string content, string? photoKey = null, CancellationToken cancellationToken = default)
     {
-        var token = _configuration["SocialPlatforms:Wykop:Token"];
         var isMock = _configuration.GetValue("SocialPlatforms:Wykop:UseMock", false);
 
-        if (isMock || string.IsNullOrWhiteSpace(token) || token.Contains("PLACEHOLDER"))
+        string? userToken = null;
+        try
         {
-            _logger.LogInformation("WykopClient [MOCK/TEST]: Publikowanie wpisu na Wykopie (Długość: {Length})", content.Length);
-            return $"wykop-mock-{Guid.NewGuid():N}[..8]";
+            userToken = await GetOrRefreshUserTokenAsync(cancellationToken);
+        }
+        catch (Exception ex) when (isMock)
+        {
+            _logger.LogWarning(ex, "WykopClient: Błąd autoryzacji Wykop, lecz włączony jest tryb UseMock.");
         }
 
-        _httpClient.DefaultRequestHeaders.Clear();
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        if (isMock || string.IsNullOrWhiteSpace(userToken) || userToken.Contains("PLACEHOLDER"))
+        {
+            if (!isMock && string.IsNullOrWhiteSpace(userToken))
+            {
+                var connectUrl = string.Empty;
+                try
+                {
+                    connectUrl = await GetConnectUrlAsync(cancellationToken);
+                }
+                catch { }
 
-        var payload = new
+                throw new InvalidOperationException(
+                    "Brak autoryzacji użytkownika Wykop (ROLE_USER). " +
+                    (!string.IsNullOrEmpty(connectUrl) ? $"Otwórz w przeglądarce link autoryzacyjny: {connectUrl}" : "Wywołaj /api/Wykop/connect-url, aby autoryzować konto."));
+            }
+
+            _logger.LogInformation("WykopClient [MOCK/TEST]: Publikowanie wpisu na Wykopie (Długość: {Length})", content.Length);
+            return $"wykop-mock-{Guid.NewGuid():N}"[..8];
+        }
+
+        var baseUrl = GetBaseUrl();
+        var client = _httpClientFactory.CreateClient("WykopClient");
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "entries"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Content = JsonContent.Create(new
         {
             data = new
             {
                 content,
                 photo = photoKey
             }
-        };
+        });
 
-        var response = await _httpClient.PostAsJsonAsync("entries", payload, cancellationToken);
+        using var response = await client.SendAsync(request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -67,4 +149,142 @@ public class WykopClient : IWykopClient
 
         return "wykop-entry-published";
     }
+
+    private async Task<string?> GetOrRefreshUserTokenAsync(CancellationToken cancellationToken)
+    {
+        // 1. Sprawdź pamięć podręczną
+        if (_memoryCache.TryGetValue(UserTokenCacheKey, out string? cachedUserToken) && !string.IsNullOrWhiteSpace(cachedUserToken))
+        {
+            return cachedUserToken;
+        }
+
+        // 2. Sprawdź konfigurację (UserToken)
+        var userToken = _configuration["SocialPlatforms:Wykop:UserToken"];
+        if (!string.IsNullOrWhiteSpace(userToken) && !userToken.Contains("PLACEHOLDER"))
+        {
+            _memoryCache.Set(UserTokenCacheKey, userToken.Trim(), TimeSpan.FromHours(12));
+            return userToken.Trim();
+        }
+
+        // 3. Sprawdź RefreshToken
+        var refreshToken = _memoryCache.TryGetValue(RefreshTokenCacheKey, out string? cachedRefresh) && !string.IsNullOrWhiteSpace(cachedRefresh)
+            ? cachedRefresh
+            : _configuration["SocialPlatforms:Wykop:RefreshToken"];
+
+        if (!string.IsNullOrWhiteSpace(refreshToken) && !refreshToken.Contains("PLACEHOLDER"))
+        {
+            var refreshed = await RefreshUserTokenAsync(refreshToken.Trim(), cancellationToken);
+            if (!string.IsNullOrWhiteSpace(refreshed))
+            {
+                return refreshed;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<string?> RefreshUserTokenAsync(string refreshToken, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Odświeżanie tokenu użytkownika Wykop v3 przez /refresh-token...");
+        var baseUrl = GetBaseUrl();
+        var client = _httpClientFactory.CreateClient("WykopClient");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "refresh-token"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Content = JsonContent.Create(new
+        {
+            data = new
+            {
+                refresh_token = refreshToken
+            }
+        });
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Nie udało się odświeżyć tokenu Wykop (HTTP {StatusCode})", response.StatusCode);
+            return null;
+        }
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("token", out var tokenEl))
+        {
+            var newToken = tokenEl.GetString();
+            if (!string.IsNullOrWhiteSpace(newToken))
+            {
+                string? newRefresh = null;
+                if (dataEl.TryGetProperty("refresh_token", out var rTokenEl))
+                {
+                    newRefresh = rTokenEl.GetString();
+                }
+
+                await SaveUserTokensAsync(newToken, newRefresh ?? refreshToken, cancellationToken);
+                return newToken;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<string?> GetOrRefreshAppTokenAsync(CancellationToken cancellationToken)
+    {
+        if (_memoryCache.TryGetValue(AppTokenCacheKey, out string? cachedToken) && !string.IsNullOrWhiteSpace(cachedToken))
+        {
+            return cachedToken;
+        }
+
+        var key = _configuration["SocialPlatforms:Wykop:Key"] ?? _configuration["SocialPlatforms:Wykop:Token"];
+        var secret = _configuration["SocialPlatforms:Wykop:Secret"];
+
+        if (string.IsNullOrWhiteSpace(key) || key.Contains("PLACEHOLDER") ||
+            string.IsNullOrWhiteSpace(secret) || secret.Contains("PLACEHOLDER"))
+        {
+            return null;
+        }
+
+        var authUrl = _configuration["SocialPlatforms:Wykop:AuthUrl"] ?? "https://wykop.pl/api/v3/auth";
+        var client = _httpClientFactory.CreateClient("WykopClient");
+        using var authRequest = new HttpRequestMessage(HttpMethod.Post, authUrl);
+        authRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        authRequest.Content = JsonContent.Create(new
+        {
+            data = new
+            {
+                key = key.Trim(),
+                secret = secret.Trim()
+            }
+        });
+
+        using var authResponse = await client.SendAsync(authRequest, cancellationToken);
+        if (!authResponse.IsSuccessStatusCode)
+        {
+            var errorBody = await authResponse.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Błąd autoryzacji Wykop API v3 (HTTP {StatusCode}): {Error}", authResponse.StatusCode, errorBody);
+            throw new HttpRequestException($"Błąd autoryzacji Wykop API v3: {errorBody}");
+        }
+
+        var authJson = await authResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var authDoc = JsonDocument.Parse(authJson);
+
+        if (authDoc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("token", out var tokenEl))
+        {
+            var token = tokenEl.GetString();
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                _memoryCache.Set(AppTokenCacheKey, token, TimeSpan.FromHours(12));
+                return token;
+            }
+        }
+
+        throw new InvalidOperationException("Odpowiedź z /api/v3/auth nie zawierała pola data.token.");
+    }
+
+    private string GetBaseUrl()
+    {
+        var baseUrl = _configuration["SocialPlatforms:Wykop:BaseUrl"] ?? "https://wykop.pl/api/v3/";
+        if (!baseUrl.EndsWith("/")) baseUrl += "/";
+        return baseUrl;
+    }
 }
+

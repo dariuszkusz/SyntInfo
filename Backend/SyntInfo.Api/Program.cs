@@ -5,6 +5,7 @@ using SyntInfo.Infrastructure.Persistence;
 using SyntInfo.Application.Interfaces;
 using SyntInfo.Domain.Interfaces;
 using Wolverine;
+using Scalar.AspNetCore;
 
 
 try
@@ -38,6 +39,9 @@ try
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ISocialPostGenerator>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ITelegramNotificationService>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ISocialPublisherFactory>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IWykopClient>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IHejtoClient>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IMailerLiteClient>();
     });
 
 
@@ -48,8 +52,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         o => o.UseVector().EnableRetryOnFailure()));
 
 
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddControllers()
+    .AddJsonOptions(opts =>
+    {
+        opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
+// Generowanie specyfikacji OpenAPI dla interfejsu Scalar
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCors(options =>
@@ -86,23 +94,31 @@ builder.Services.AddHttpClient<IGoogleAiStudioClient, SyntInfo.Infrastructure.Se
     client.Timeout = TimeSpan.FromMinutes(10);
 });
 
+// Pamięć podręczna (dla tokenów OAuth2 Hejto itp.)
+builder.Services.AddMemoryCache();
+
 // Rejestracja modułu automatyzacji Social Media & Telegram
-builder.Services.AddHttpClient<IWykopClient, SyntInfo.Infrastructure.Services.WykopClient>(client =>
+builder.Services.AddHttpClient("WykopClient", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 });
-builder.Services.AddHttpClient<IHejtoClient, SyntInfo.Infrastructure.Services.HejtoClient>(client =>
+builder.Services.AddHttpClient("HejtoClient", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 });
-builder.Services.AddHttpClient<IFacebookClient, SyntInfo.Infrastructure.Services.FacebookClient>(client =>
+builder.Services.AddHttpClient("FacebookClient", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 });
-builder.Services.AddHttpClient<IMailerLiteClient, SyntInfo.Infrastructure.Services.MailerLiteClient>(client =>
+builder.Services.AddHttpClient("MailerLiteClient", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+
+builder.Services.AddScoped<IWykopClient, SyntInfo.Infrastructure.Services.WykopClient>();
+builder.Services.AddScoped<IHejtoClient, SyntInfo.Infrastructure.Services.HejtoClient>();
+builder.Services.AddScoped<IFacebookClient, SyntInfo.Infrastructure.Services.FacebookClient>();
+builder.Services.AddScoped<IMailerLiteClient, SyntInfo.Infrastructure.Services.MailerLiteClient>();
 
 builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.WykopPublisher>();
 builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.HejtoPublisher>();
@@ -138,11 +154,20 @@ builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Konfiguracja specyfikacji OpenAPI i interfejsu Scalar UI (bez duplikatu Swagger UI)
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwagger(options =>
+    {
+        options.RouteTemplate = "openapi/{documentName}.json";
+    });
+
+    app.MapScalarApiReference(options =>
+    {
+        options
+            .WithTitle("SyntInfo API Reference")
+            .WithTheme(ScalarTheme.Moon);
+    });
 }
 
 if (app.Environment.IsDevelopment())
@@ -162,6 +187,9 @@ app.MapControllers();
 
     // Seed database
     await DataSeeder.SeedAsync(app.Services);
+
+    Log.Information("Backend SyntInfo gotowy do pracy.");
+    Log.Information("Dokumentacja API (Scalar): http://localhost:5000/scalar/v1");
 
     app.Run();
 }

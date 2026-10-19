@@ -9,19 +9,22 @@ namespace SyntInfo.Infrastructure.Services;
 
 public class MailerLiteClient : IMailerLiteClient
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<MailerLiteClient> _logger;
 
-    public MailerLiteClient(HttpClient httpClient, IConfiguration configuration, ILogger<MailerLiteClient> logger)
+    public MailerLiteClient(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<MailerLiteClient> logger)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+    }
 
+    private Uri GetBaseUri()
+    {
         var baseUrl = _configuration["SocialPlatforms:MailerLite:BaseUrl"] ?? "https://connect.mailerlite.com/api/";
         if (!baseUrl.EndsWith("/")) baseUrl += "/";
-        _httpClient.BaseAddress = new Uri(baseUrl);
+        return new Uri(baseUrl);
     }
 
     public async Task<string> SendNewsletterCampaignAsync(string subject, string htmlContent, string plainTextContent, CancellationToken cancellationToken = default)
@@ -37,9 +40,8 @@ public class MailerLiteClient : IMailerLiteClient
             return $"mailerlite-mock-{Guid.NewGuid():N}[..8]";
         }
 
-        _httpClient.DefaultRequestHeaders.Clear();
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        var client = _httpClientFactory.CreateClient("MailerLiteClient");
+        var baseUri = GetBaseUri();
 
         // Krok 1: Tworzenie kampanii
         var campaignName = $"SyntInfo - {DateTime.UtcNow:yyyy-MM-dd HH:mm} - {subject}";
@@ -61,7 +63,12 @@ public class MailerLiteClient : IMailerLiteClient
             }
         };
 
-        var createResponse = await _httpClient.PostAsJsonAsync("campaigns", createPayload, cancellationToken);
+        using var createRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(baseUri, "campaigns"));
+        createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        createRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        createRequest.Content = JsonContent.Create(createPayload);
+
+        using var createResponse = await client.SendAsync(createRequest, cancellationToken);
 
         if (!createResponse.IsSuccessStatusCode)
         {
@@ -90,7 +97,13 @@ public class MailerLiteClient : IMailerLiteClient
             delivery = "instant"
         };
 
-        var scheduleResponse = await _httpClient.PostAsJsonAsync($"campaigns/{campaignId}/schedule", schedulePayload, cancellationToken);
+        using var scheduleRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(baseUri, $"campaigns/{campaignId}/schedule"));
+        scheduleRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        scheduleRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        scheduleRequest.Content = JsonContent.Create(schedulePayload);
+
+        using var scheduleResponse = await client.SendAsync(scheduleRequest, cancellationToken);
+
         if (!scheduleResponse.IsSuccessStatusCode)
         {
             var scheduleErr = await scheduleResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -113,9 +126,8 @@ public class MailerLiteClient : IMailerLiteClient
             return true;
         }
 
-        _httpClient.DefaultRequestHeaders.Clear();
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        var client = _httpClientFactory.CreateClient("MailerLiteClient");
+        var baseUri = GetBaseUri();
 
         var payload = new
         {
@@ -124,7 +136,12 @@ public class MailerLiteClient : IMailerLiteClient
             status = "active"
         };
 
-        var response = await _httpClient.PostAsJsonAsync("subscribers", payload, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(baseUri, "subscribers"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Content = JsonContent.Create(payload);
+
+        using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var err = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -147,9 +164,8 @@ public class MailerLiteClient : IMailerLiteClient
             return true;
         }
 
-        _httpClient.DefaultRequestHeaders.Clear();
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        var client = _httpClientFactory.CreateClient("MailerLiteClient");
+        var baseUri = GetBaseUri();
 
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var payload = new
@@ -158,7 +174,12 @@ public class MailerLiteClient : IMailerLiteClient
             status = "unsubscribed"
         };
 
-        var response = await _httpClient.PostAsJsonAsync("subscribers", payload, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(baseUri, "subscribers"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Content = JsonContent.Create(payload);
+
+        using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var err = await response.Content.ReadAsStringAsync(cancellationToken);
