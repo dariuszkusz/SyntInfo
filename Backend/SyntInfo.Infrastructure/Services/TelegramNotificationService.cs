@@ -154,4 +154,167 @@ public class TelegramNotificationService : ITelegramNotificationService
             _logger.LogWarning(ex, "Nie udało się zaktualizować wiadomości {MessageId} na Telegramie: {Error}", messageId, ex.Message);
         }
     }
+
+    public async Task<long> SendArticleForCurationAsync(NewsArticle article, bool isSelected, CancellationToken cancellationToken = default)
+    {
+        var chatIdStr = _configuration["Telegram:AdminChatId"];
+        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || chatIdStr.Contains("PLACEHOLDER") || !long.TryParse(chatIdStr, out var chatId))
+        {
+            _logger.LogInformation("TelegramNotificationService [MOCK/TEST]: Preselekcja artykułu '{Title}' (Selected: {IsSelected})", article.Title, isSelected);
+            return Random.Shared.Next(1000, 99999);
+        }
+
+        var statusIcon = isSelected ? "✅ WYBRANO DO WYDANIA" : "⏳ CZEKA NA DECYZJĘ";
+        var btnText = isSelected ? "➖ Pomiń / Usuń z wydania" : "➕ Wybierz do wydania InfoSkrót";
+        var encodedTitle = WebUtility.HtmlEncode(article.Title);
+        var encodedSummary = WebUtility.HtmlEncode(article.SummaryText);
+        var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+
+        var text = $"<b>[{statusIcon}]</b>\n\n" +
+                   $"<b>📌 {encodedTitle}</b>\n\n" +
+                   $"{encodedSummary}\n\n" +
+                   $"🔗 <a href=\"{primaryUrl}\">Czytaj źródło</a>\n" +
+                   $"🆔 <code>{article.Id}</code>";
+
+        if (text.Length > 4000) text = text[..3950] + "...";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData(btnText, $"curate_toggle:{article.Id}") }
+        });
+
+        try
+        {
+            var msg = await client.SendMessage(
+                chatId: new ChatId(chatId),
+                text: text,
+                parseMode: ParseMode.Html,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken);
+
+            return msg.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd wysyłania artykułu do preselekcji na Telegram");
+            return 0;
+        }
+    }
+
+    public async Task UpdateCurationMessageAsync(long messageId, NewsArticle article, bool isSelected, CancellationToken cancellationToken = default)
+    {
+        var chatIdStr = _configuration["Telegram:AdminChatId"];
+        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        {
+            return;
+        }
+
+        var statusIcon = isSelected ? "✅ WYBRANO DO WYDANIA" : "⏳ CZEKA NA DECYZJĘ";
+        var btnText = isSelected ? "➖ Usuń z wydania" : "➕ Wybierz do wydania InfoSkrót";
+        var encodedTitle = WebUtility.HtmlEncode(article.Title);
+        var encodedSummary = WebUtility.HtmlEncode(article.SummaryText);
+        var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+
+        var text = $"<b>[{statusIcon}]</b>\n\n" +
+                   $"<b>📌 {encodedTitle}</b>\n\n" +
+                   $"{encodedSummary}\n\n" +
+                   $"🔗 <a href=\"{primaryUrl}\">Czytaj źródło</a>\n" +
+                   $"🆔 <code>{article.Id}</code>";
+
+        if (text.Length > 4000) text = text[..3950] + "...";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData(btnText, $"curate_toggle:{article.Id}") }
+        });
+
+        try
+        {
+            await client.EditMessageText(
+                chatId: new ChatId(chatId),
+                messageId: (int)messageId,
+                text: text,
+                parseMode: ParseMode.Html,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się zaktualizować kafelka artykułu {MessageId}", messageId);
+        }
+    }
+
+    public async Task<long> SendDigestControlPanelAsync(int selectedCount, CancellationToken cancellationToken = default)
+    {
+        var chatIdStr = _configuration["Telegram:AdminChatId"];
+        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        {
+            return Random.Shared.Next(1000, 99999);
+        }
+
+        var text = $"🚀 <b>Panel Wydania InfoSkrót</b>\n\n" +
+                   $"Aktualnie zaakceptowanych artykułów do wydania: <b>{selectedCount}</b>\n\n" +
+                   $"Po kliknięciu przycisku poniżej system połączy wybrane artykuły w <b>jedno spójne wydanie</b> z grafikami i opublikuje na Wykop, Hejto oraz Newsletter!";
+
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("🚀 Opublikuj wydanie InfoSkrót", "digest_publish") }
+        });
+
+        try
+        {
+            var msg = await client.SendMessage(
+                chatId: new ChatId(chatId),
+                text: text,
+                parseMode: ParseMode.Html,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken);
+
+            return msg.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd wysyłania panelu wydania na Telegram");
+            return 0;
+        }
+    }
+
+    public async Task<long> SendSimpleNotificationAsync(string message, CancellationToken cancellationToken = default)
+    {
+        var chatIdStr = _configuration["Telegram:AdminChatId"];
+        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        {
+            _logger.LogInformation("TelegramNotificationService [MOCK]: {Message}", message);
+            return Random.Shared.Next(1000, 99999);
+        }
+
+        try
+        {
+            var msg = await client.SendMessage(
+                chatId: new ChatId(chatId),
+                text: message,
+                parseMode: ParseMode.Html,
+                cancellationToken: cancellationToken);
+
+            return msg.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd wysyłania powiadomienia na Telegram");
+            return 0;
+        }
+    }
 }
+

@@ -13,8 +13,14 @@ public interface IWykopClient
     Task SaveUserTokensAsync(string userToken, string? refreshToken, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Przesyła zdjęcie do Wykop API v3 (POST /media/photos/upload?type=entries) i zwraca klucz zdjęcia do wpisu.
+    /// </summary>
+    Task<string?> UploadPhotoAsync(string imageUrlOrPath, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Tworzy wpis na mikroblogu Wykop v3 (POST /entries).
     /// </summary>
     Task<string> CreateEntryAsync(string content, string? photoKey = null, CancellationToken cancellationToken = default);
 }
+
 

@@ -37,6 +37,9 @@ namespace SyntInfo.Infrastructure.Migrations
                     b.Property<string>("DeepContent")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("DigestPublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Vector>("Embedding")
                         .HasColumnType("vector(1536)");
 
@@ -45,6 +48,9 @@ namespace SyntInfo.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSelectedForDigest")
                         .HasColumnType("boolean");
 
                     b.Property<string>("OriginalTitle")
@@ -81,6 +87,8 @@ namespace SyntInfo.Infrastructure.Migrations
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
 
                     b.HasIndex("IsActive", "PublishedAt");
+
+                    b.HasIndex("IsSelectedForDigest", "DigestPublishedAt");
 
                     b.ToTable("NewsArticles");
                 });

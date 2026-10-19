@@ -25,3 +25,19 @@ public record RejectSocialPostDraftCommand(
     Guid DraftId,
     long? TelegramChatId = null,
     long? TelegramMessageId = null);
+
+/// <summary>
+/// Komenda przełączająca wybór artykułu do wydania zbiorczego InfoSkrót.
+/// </summary>
+public record ToggleArticleDigestSelectionCommand(
+    Guid ArticleId,
+    long? TelegramChatId = null,
+    long? TelegramMessageId = null);
+
+/// <summary>
+/// Komenda generująca i publikująca zbiorcze wydanie InfoSkrót z zaakceptowanych artykułów.
+/// </summary>
+public record PublishDigestIssueCommand(
+    long? TelegramChatId = null,
+    long? TelegramMessageId = null);
+

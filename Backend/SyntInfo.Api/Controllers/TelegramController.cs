@@ -93,12 +93,22 @@ public class TelegramController : ControllerBase
             }
 
             var parts = data.Split(':', 2);
-            if (parts.Length == 2 && Guid.TryParse(parts[1], out var draftId))
-            {
-                var action = parts[0].ToLowerInvariant();
-                var chatId = callback.Message?.Chat.Id;
-                var messageId = callback.Message?.Id;
+            var action = parts[0].ToLowerInvariant();
+            var chatId = callback.Message?.Chat.Id;
+            var messageId = callback.Message?.Id;
 
+            if (action == "digest_publish")
+            {
+                _logger.LogInformation("Wyzwalanie publikacji wydania InfoSkrót z poziomu Telegrama.");
+                await _bus.PublishAsync(new PublishDigestIssueCommand(chatId, messageId));
+            }
+            else if (action == "curate_toggle" && parts.Length == 2 && Guid.TryParse(parts[1], out var articleId))
+            {
+                _logger.LogInformation("Przełączanie selekcji artykułu {ArticleId} do wydania.", articleId);
+                await _bus.PublishAsync(new ToggleArticleDigestSelectionCommand(articleId, chatId, messageId));
+            }
+            else if (parts.Length == 2 && Guid.TryParse(parts[1], out var draftId))
+            {
                 if (action == "approve")
                 {
                     _logger.LogInformation("Wyzwalanie publikacji posta dla szkicu {DraftId}", draftId);
@@ -114,6 +124,7 @@ public class TelegramController : ControllerBase
 
         return Ok();
     }
+
 
     /// <summary>
     /// Ręczne wyzwolenie generowania szkiców postów dla administratora (do celów testowych/operacyjnych).
@@ -236,4 +247,40 @@ public class TelegramController : ControllerBase
             return StatusCode(500, new { Success = false, Error = ex.Message });
         }
     }
+
+    /// <summary>
+    /// Wysyła partię najnowszych artykułów do selekcji przez administratora na Telegramie
+    /// wraz z panelem sterowania do wygenerowania i publikacji zbiorczego wydania InfoSkrót.
+    /// </summary>
+    [HttpPost("send-curation-batch")]
+    public async Task<IActionResult> SendCurationBatch([FromQuery] int count = 5)
+    {
+        var articles = await _uow.Repository<NewsArticle>().Query()
+            .Where(a => a.IsActive && a.DigestPublishedAt == null)
+            .OrderByDescending(a => a.PublishedAt)
+            .Take(count)
+            .ToListAsync(HttpContext.RequestAborted);
+
+        if (!articles.Any())
+        {
+            return Ok(new { Success = true, Message = "Brak nowych artykułów oczekujących na selekcję do wydania." });
+        }
+
+        var selectedCount = 0;
+        foreach (var article in articles)
+        {
+            if (article.IsSelectedForDigest) selectedCount++;
+            await _telegramService.SendArticleForCurationAsync(article, article.IsSelectedForDigest, HttpContext.RequestAborted);
+        }
+
+        await _telegramService.SendDigestControlPanelAsync(selectedCount, HttpContext.RequestAborted);
+
+        return Ok(new
+        {
+            Success = true,
+            SentCount = articles.Count,
+            Message = $"Wysłano {articles.Count} artykułów do selekcji na Telegram wraz z panelem publikacji wydania."
+        });
+    }
 }
+

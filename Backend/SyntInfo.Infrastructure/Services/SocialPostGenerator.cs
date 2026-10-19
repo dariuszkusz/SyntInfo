@@ -46,17 +46,153 @@ public class SocialPostGenerator : ISocialPostGenerator
         return GenerateFallbackTemplate(platform, article, primaryUrl, categoryTag);
     }
 
+    public Task<string> GenerateDigestContentForPlatformAsync(SocialPlatformType platform, IReadOnlyList<NewsArticle> articles, CancellationToken cancellationToken = default)
+    {
+        if (articles == null || articles.Count == 0)
+        {
+            return Task.FromResult(string.Empty);
+        }
+
+        var result = GenerateStructuredDigest(platform, articles);
+        return Task.FromResult(result);
+    }
+
+    private static string GenerateStructuredDigest(SocialPlatformType platform, IReadOnlyList<NewsArticle> articles)
+    {
+        var sb = new StringBuilder();
+        var dateStr = DateTime.UtcNow.ToString("dd.MM.yyyy");
+
+        switch (platform)
+        {
+            case SocialPlatformType.Hejto:
+                sb.AppendLine($"# 🗞️ InfoSkrót — Wydanie z {dateStr}");
+                sb.AppendLine();
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var a = articles[i];
+                    sb.AppendLine($"### {i + 1}. {a.Title}");
+                    sb.AppendLine();
+
+                    if (!string.IsNullOrWhiteSpace(a.ImageUrl))
+                    {
+                        sb.AppendLine($"![{a.Title}]({a.ImageUrl})");
+                        sb.AppendLine();
+                    }
+
+                    sb.AppendLine(a.SummaryText);
+                    sb.AppendLine();
+                    sb.AppendLine("---");
+                    sb.AppendLine();
+                }
+
+                sb.AppendLine("### 🔗 Źródła:");
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var a = articles[i];
+                    var url = a.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+                    sb.AppendLine($"{i + 1}. [{a.Title}]({url})");
+                }
+                sb.AppendLine();
+                sb.AppendLine("#wiadomosci #infoskrot #polska #swiat");
+                break;
+
+            case SocialPlatformType.Wykop:
+                sb.AppendLine($"🗞️ InfoSkrót — Wydanie z {dateStr}");
+                sb.AppendLine();
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var a = articles[i];
+                    sb.AppendLine($"🔹 {i + 1}. {a.Title}");
+                    sb.AppendLine(a.SummaryText);
+                    sb.AppendLine();
+                }
+
+                sb.AppendLine("🔗 Źródła:");
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var a = articles[i];
+                    var url = a.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+                    sb.AppendLine($"{i + 1}. {a.Title}: {url}");
+                }
+                sb.AppendLine();
+                sb.AppendLine("#wiadomosci #infoskrot #polska #swiat");
+                break;
+
+            case SocialPlatformType.Newsletter:
+                sb.AppendLine($"<div style=\"font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; color: #1e293b;\">");
+                sb.AppendLine($"  <h1 style=\"color: #0284c7; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;\">🗞️ InfoSkrót — Wydanie z {dateStr}</h1>");
+                sb.AppendLine($"  <p style=\"color: #64748b;\">Poniżej znajdziesz najważniejsze wiadomości wybrane i zsyntetyzowane przez redakcję InfoSkrót.</p>");
+                sb.AppendLine($"  <hr style=\"border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;\" />");
+
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var a = articles[i];
+                    var url = a.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+                    sb.AppendLine($"  <div style=\"margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #f1f5f9;\">");
+                    sb.AppendLine($"    <h3 style=\"margin-top: 0; color: #0f172a;\">{i + 1}. {a.Title}</h3>");
+
+                    if (!string.IsNullOrWhiteSpace(a.ImageUrl))
+                    {
+                        sb.AppendLine($"    <div style=\"margin: 10px 0;\"><img src=\"{a.ImageUrl}\" alt=\"{a.Title}\" style=\"max-width: 100%; border-radius: 8px; max-height: 300px; object-fit: cover;\" /></div>");
+                    }
+
+                    sb.AppendLine($"    <p style=\"line-height: 1.6; color: #334155;\">{a.SummaryText}</p>");
+                    sb.AppendLine($"    <p><a href=\"{url}\" style=\"color: #0284c7; text-decoration: none; font-weight: bold;\">🔗 Czytaj pełne źródło &rarr;</a></p>");
+                    sb.AppendLine($"  </div>");
+                }
+
+                sb.AppendLine($"  <div style=\"background: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 30px;\">");
+                sb.AppendLine($"    <h4 style=\"margin-top: 0; color: #475569;\">🔗 Zestawienie źródeł:</h4>");
+                sb.AppendLine($"    <ol style=\"margin: 0; padding-left: 20px; color: #64748b;\">");
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var a = articles[i];
+                    var url = a.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+                    sb.AppendLine($"      <li><a href=\"{url}\" style=\"color: #0284c7;\">{a.Title}</a></li>");
+                }
+                sb.AppendLine($"    </ol>");
+                sb.AppendLine($"  </div>");
+                sb.AppendLine($"</div>");
+                break;
+
+            case SocialPlatformType.Facebook:
+            default:
+                sb.AppendLine($"🗞️ InfoSkrót — Przegląd wiadomości z {dateStr}");
+                sb.AppendLine();
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var a = articles[i];
+                    sb.AppendLine($"🔴 {i + 1}. {a.Title}");
+                    sb.AppendLine(a.SummaryText);
+                    sb.AppendLine();
+                }
+                sb.AppendLine("🔗 Źródła:");
+                for (int i = 0; i < articles.Count; i++)
+                {
+                    var a = articles[i];
+                    var url = a.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+                    sb.AppendLine($"{i + 1}. {url}");
+                }
+                sb.AppendLine();
+                sb.AppendLine("#infoskrot #wiadomosci");
+                break;
+        }
+
+        return sb.ToString();
+    }
+
+
     private static string BuildPrompt(SocialPlatformType platform, NewsArticle article, string primaryUrl, string categoryTag)
     {
         return platform switch
         {
             SocialPlatformType.Wykop =>
                 $"Napisz zwięzły wpis na mikroblog Wykop.pl (maksymalnie 400 znaków) na podstawie poniższych informacji. Tytuł: {article.Title}. " +
-                $"Dołącz 2-3 kluczowe fakty, link do źródła: {primaryUrl} oraz odpowiednie hashtagi: #wiadomosci #{categoryTag} #syntinfo. Zwróć tylko czystą treść wpisu.",
+                $"Dołącz 2-3 kluczowe fakty, link do źródła: {primaryUrl} oraz odpowiednie hashtagi: #wiadomosci #{categoryTag} #infoskrot. Zwróć tylko czystą treść wpisu.",
 
             SocialPlatformType.Hejto =>
                 $"Napisz angażujący wpis na portal Hejto.pl (maksymalnie 500 znaków) z formatowaniem Markdown na podstawie: {article.Title}. " +
-                $"Przedstaw esencję newsa, link: {primaryUrl} i tagi: #wiadomosci #{categoryTag} #polska. Zwróć tylko treść.",
+                $"Przedstaw esencję newsa, link: {primaryUrl} i tagi: #wiadomosci #{categoryTag} #infoskrot #polska. Zwróć tylko treść.",
 
             SocialPlatformType.Facebook =>
                 $"Napisz profesjonalny, angażujący post na Fanpage Facebook (około 400-600 znaków) z emotikonami o: {article.Title}. " +
@@ -115,7 +251,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 sb.AppendLine(Truncate(article.SummaryText, 300));
                 sb.AppendLine();
                 sb.AppendLine($"Więcej: {primaryUrl}");
-                sb.AppendLine($"#wiadomosci #{categoryTag} #syntinfo #polska");
+                sb.AppendLine($"#wiadomosci #{categoryTag} #infoskrot #polska");
                 break;
 
             case SocialPlatformType.Hejto:
@@ -125,7 +261,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 sb.AppendLine();
                 sb.AppendLine($"🔗 [Źródło artykułu]({primaryUrl})");
                 sb.AppendLine();
-                sb.AppendLine($"#wiadomosci #{categoryTag} #syntinfo");
+                sb.AppendLine($"#wiadomosci #{categoryTag} #infoskrot");
                 break;
 
             case SocialPlatformType.Facebook:
@@ -162,3 +298,4 @@ public class SocialPostGenerator : ISocialPostGenerator
         return text[..maxLength] + "...";
     }
 }
+

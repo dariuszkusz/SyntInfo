@@ -19,7 +19,13 @@ public class WykopPublisher : ISocialPlatformPublisher
     {
         try
         {
-            var postId = await _wykopClient.CreateEntryAsync(draft.Content, null, cancellationToken);
+            string? photoKey = null;
+            if (!string.IsNullOrWhiteSpace(article.ImageUrl))
+            {
+                photoKey = await _wykopClient.UploadPhotoAsync(article.ImageUrl, cancellationToken);
+            }
+
+            var postId = await _wykopClient.CreateEntryAsync(draft.Content, photoKey, cancellationToken);
             return PublishResult.Succeeded(postId);
         }
         catch (Exception ex)

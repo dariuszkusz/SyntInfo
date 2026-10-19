@@ -34,6 +34,7 @@ public class AppDbContext : DbContext
 
             // Indeks kompozytowy dla częstych zapytań o aktywne i najświeższe artykuły
             entity.HasIndex(e => new { e.IsActive, e.PublishedAt });
+            entity.HasIndex(e => new { e.IsSelectedForDigest, e.DigestPublishedAt });
 
             // Indeks HNSW (Hierarchical Navigable Small World) dla szybkiego wyszukiwania podobieństwa
             entity.HasIndex(e => e.Embedding)

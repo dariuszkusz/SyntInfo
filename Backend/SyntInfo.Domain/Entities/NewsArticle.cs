@@ -24,4 +24,11 @@ public class NewsArticle
     public bool IsActive { get; set; } = true;
     public string? DeepContent { get; set; }
     public string? ImageUrl { get; set; }
+
+    /// <summary>Czy artykuł został wybrany przez redaktora/administratora do wydania zbiorczego InfoSkrót.</summary>
+    public bool IsSelectedForDigest { get; set; } = false;
+
+    /// <summary>Kiedy artykuł został opublikowany w ramach wydania zbiorczego.</summary>
+    public DateTime? DigestPublishedAt { get; set; }
 }
+
