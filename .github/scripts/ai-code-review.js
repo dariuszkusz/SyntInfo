@@ -113,7 +113,7 @@ function filterDiff(fullDiff) {
 }
 
 async function callGeminiApi(apiKey, diffContent, pr) {
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const models = ['gemini-3.8-flash', 'gemini-3.8-flash-lite', 'gemini-3.8-pro', 'gemini-2.5-flash'];
   const systemInstruction = `Jesteś doświadczonym Senior Architektem i ekspertem ds. Code Review w zespole programistycznym SyntInfo (.NET, C#, Angular, TypeScript).
 Twoim zadaniem jest przeprowadzenie rzetelnego, konstruktywnego i profesjonalnego przeglądu kodu Pull Requesta (PR).
 
@@ -169,10 +169,13 @@ Format odpowiedzi (użyj czytelnego formatu Markdown w języku polskim):
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey
+        },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          systemInstruction: { parts: [{ text: systemInstruction }] },
+          system_instruction: { parts: [{ text: systemInstruction }] },
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 3500
@@ -187,9 +190,15 @@ Format odpowiedzi (użyj czytelnego formatu Markdown w języku polskim):
       }
 
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) {
-        return text;
+      const candidate = data.candidates?.[0];
+      const parts = candidate?.content?.parts;
+      if (Array.isArray(parts)) {
+        // Filter out thought parts if thinking is returned by Gemini 3.8
+        const textParts = parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text);
+        const text = textParts.length > 0 ? textParts.join('\n') : parts[0]?.text;
+        if (text) {
+          return text;
+        }
       }
     } catch (e) {
       console.warn(`Error invoking model ${model}:`, e.message);
