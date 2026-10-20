@@ -112,8 +112,18 @@ function filterDiff(fullDiff) {
   return validDiffs.join('diff --git ');
 }
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function callGeminiApi(apiKey, diffContent, pr) {
-  const models = ['gemini-3.8-flash', 'gemini-3.8-flash-lite', 'gemini-3.8-pro', 'gemini-2.5-flash'];
+  // Valid, active Gemini 3 family models in priority order
+  const models = [
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite'
+  ];
   const systemInstruction = `Jesteś doświadczonym Senior Architektem i ekspertem ds. Code Review w zespole programistycznym SyntInfo (.NET, C#, Angular, TypeScript).
 Twoim zadaniem jest przeprowadzenie rzetelnego, konstruktywnego i profesjonalnego przeglądu kodu Pull Requesta (PR).
 
@@ -163,45 +173,80 @@ Format odpowiedzi (użyj czytelnego formatu Markdown w języku polskim):
 
   const userPrompt = `Tytuł PR: ${pr.title}\nOpis PR: ${pr.body || 'Brak opisu'}\n\nOto Git Diff zmian do przeglądu:\n\`\`\`diff\n${diffContent}\n\`\`\``;
 
+  const requestBody = JSON.stringify({
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    system_instruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 3500
+    }
+  });
+
+  const MAX_RETRIES_PER_MODEL = 3;
+
   for (const model of models) {
-    try {
-      console.log(`Attempting Gemini model: ${model}...`);
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          system_instruction: { parts: [{ text: systemInstruction }] },
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 3500
+    console.log(`🤖 Attempting Gemini model: ${model}...`);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES_PER_MODEL; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey
+          },
+          body: requestBody,
+          signal: AbortSignal.timeout(60000)
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+
+          // If model doesn't exist or is unsupported, skip retries immediately
+          if (res.status === 404) {
+            console.warn(`Model ${model} returned HTTP 404 (Not Found / Unsupported). Skipping to next model.`);
+            break;
           }
-        })
-      });
+          if (res.status === 400) {
+            console.warn(`Model ${model} returned HTTP 400 (Bad Request): ${errText}. Skipping to next model.`);
+            break;
+          }
 
-      if (!res.ok) {
-        const errText = await res.text();
-        console.warn(`Model ${model} returned HTTP ${res.status}: ${errText}`);
-        continue;
-      }
+          // For 503 (High demand / Temporary unavailable) or 429 (Rate limit) or 5xx: retry with backoff
+          if (attempt < MAX_RETRIES_PER_MODEL && (res.status === 503 || res.status === 429 || res.status >= 500)) {
+            const delayMs = attempt * 2500 + Math.floor(Math.random() * 1000);
+            console.warn(`Model ${model} returned HTTP ${res.status}. Retrying attempt ${attempt + 1}/${MAX_RETRIES_PER_MODEL} in ${(delayMs / 1000).toFixed(1)}s...`);
+            await sleep(delayMs);
+            continue;
+          } else {
+            console.warn(`Model ${model} failed with HTTP ${res.status}: ${errText.substring(0, 300)}`);
+            break; // Move to next model
+          }
+        }
 
-      const data = await res.json();
-      const candidate = data.candidates?.[0];
-      const parts = candidate?.content?.parts;
-      if (Array.isArray(parts)) {
-        // Filter out thought parts if thinking is returned by Gemini 3.8
-        const textParts = parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text);
-        const text = textParts.length > 0 ? textParts.join('\n') : parts[0]?.text;
-        if (text) {
-          return text;
+        const data = await res.json();
+        const candidate = data.candidates?.[0];
+        const parts = candidate?.content?.parts;
+        if (Array.isArray(parts)) {
+          // Filter out thought parts if thinking is returned by Gemini models
+          const textParts = parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text);
+          const text = textParts.length > 0 ? textParts.join('\n') : parts[0]?.text;
+          if (text && text.trim()) {
+            console.log(`✨ Successfully generated review using model: ${model}`);
+            return text.trim();
+          }
+        }
+
+        console.warn(`Model ${model} returned no valid text content. Response:`, JSON.stringify(data).substring(0, 300));
+        break; // Empty content or blocked, try next model
+      } catch (e) {
+        console.warn(`Error invoking model ${model} (attempt ${attempt}/${MAX_RETRIES_PER_MODEL}):`, e.message);
+        if (attempt < MAX_RETRIES_PER_MODEL) {
+          const delayMs = attempt * 2000;
+          await sleep(delayMs);
         }
       }
-    } catch (e) {
-      console.warn(`Error invoking model ${model}:`, e.message);
     }
   }
 
