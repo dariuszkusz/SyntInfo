@@ -66,20 +66,48 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Konfiguruje politykę CORS dla aplikacji frontendowej Angular.
+    /// Konfiguruje politykę CORS dla aplikacji frontendowej Angular na podstawie dozwolonych originów.
+    /// Zezwala wyłącznie na zaufane originy skonfigurowane w FrontendUrl, eliminując ryzyko CORS misconfiguration.
     /// </summary>
-    public static IServiceCollection AddCorsPolicy(this IServiceCollection services)
+    public static IServiceCollection AddCorsPolicy(this IServiceCollection services, Microsoft.Extensions.Configuration.IConfiguration configuration)
     {
+        var frontendUrl = configuration["FrontendUrl"] ?? "http://localhost:4200";
+        var allowedOrigins = frontendUrl
+            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct()
+            .ToArray();
+
+        if (allowedOrigins.Length == 0)
+        {
+            allowedOrigins = new[] { "http://localhost:4200" };
+        }
+
         services.AddCors(options =>
         {
             options.AddPolicy("AllowAngular", policy =>
             {
-                policy.SetIsOriginAllowed(_ => true)
+                policy.WithOrigins(allowedOrigins)
                       .AllowAnyHeader()
                       .AllowAnyMethod()
                       .AllowCredentials();
             });
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Rejestruje klienta ITelegramBotClient przy użyciu fabryki IHttpClientFactory,
+    /// zapobiegając wyciekom gniazd (socket exhaustion) i ręcznemu tworzeniu instancji.
+    /// </summary>
+    public static IServiceCollection AddTelegramBotClient(this IServiceCollection services)
+    {
+        services.AddHttpClient("telegram_bot_client")
+            .AddTypedClient<Telegram.Bot.ITelegramBotClient>((httpClient, sp) =>
+            {
+                var botToken = sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>()["Telegram:BotToken"];
+                return new Telegram.Bot.TelegramBotClient(botToken ?? string.Empty, httpClient);
+            });
 
         return services;
     }

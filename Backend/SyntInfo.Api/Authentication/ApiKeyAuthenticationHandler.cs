@@ -59,7 +59,11 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        if (providedKey != configuredKey)
+        byte[] providedBytes = System.Text.Encoding.UTF8.GetBytes(providedKey);
+        byte[] configuredBytes = System.Text.Encoding.UTF8.GetBytes(configuredKey);
+
+        if (providedBytes.Length != configuredBytes.Length || 
+            !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes))
         {
             return Task.FromResult(AuthenticateResult.Fail("Nieprawidłowy klucz administracyjny."));
         }

@@ -25,6 +25,7 @@ public class TelegramController : ControllerBase
     private readonly IMessageBus _bus;
     private readonly IUnitOfWork _uow;
     private readonly ITelegramNotificationService _telegramService;
+    private readonly ITelegramBotClient _botClient;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<TelegramController> _logger;
@@ -33,6 +34,7 @@ public class TelegramController : ControllerBase
         IMessageBus bus,
         IUnitOfWork uow,
         ITelegramNotificationService telegramService,
+        ITelegramBotClient botClient,
         IConfiguration configuration,
         IWebHostEnvironment env,
         ILogger<TelegramController> logger)
@@ -40,6 +42,7 @@ public class TelegramController : ControllerBase
         _bus = bus;
         _uow = uow;
         _telegramService = telegramService;
+        _botClient = botClient;
         _configuration = configuration;
         _env = env;
         _logger = logger;
@@ -93,13 +96,11 @@ public class TelegramController : ControllerBase
             _logger.LogInformation("Odebrano CallbackQuery z Telegrama: Data='{Data}', From='{User}'", data, callback.From.Username);
 
             // Odpowiedz botowi na Telegramie, aby zdjąć stan ładowania przycisku
-            var token = _configuration["Telegram:BotToken"];
-            if (!string.IsNullOrWhiteSpace(token) && !token.Contains("PLACEHOLDER") && !_configuration.GetValue("Telegram:UseMock", false))
+            if (!_configuration.GetValue("Telegram:UseMock", false))
             {
                 try
                 {
-                    var botClient = new TelegramBotClient(token);
-                    await botClient.AnswerCallbackQuery(callback.Id, "Przetwarzanie decyzji...");
+                    await _botClient.AnswerCallbackQuery(callback.Id, "Przetwarzanie decyzji...");
                 }
                 catch (Exception ex)
                 {
@@ -172,7 +173,6 @@ public class TelegramController : ControllerBase
             return BadRequest(new { Error = "Brak skonfigurowanego Telegram:BotToken." });
         }
 
-        var botClient = new TelegramBotClient(token);
         var rawSecret = _configuration["Telegram:SecretToken"];
         string? secretToken = null;
 
@@ -184,7 +184,7 @@ public class TelegramController : ControllerBase
 
         try
         {
-            await botClient.SetWebhook(
+            await _botClient.SetWebhook(
                 url: targetUrl,
                 secretToken: !string.IsNullOrWhiteSpace(secretToken) ? secretToken : null);
 

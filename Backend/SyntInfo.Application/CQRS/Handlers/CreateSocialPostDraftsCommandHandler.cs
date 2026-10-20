@@ -74,16 +74,27 @@ public static class CreateSocialPostDraftsCommandHandler
             SocialPlatformType.Newsletter
         };
 
+        var articleIds = articlesToProcess.Select(a => a.Id).ToList();
+        var existingDrafts = await uow.Repository<SocialPostDraft>().Query()
+            .Where(d => articleIds.Contains(d.NewsArticleId))
+            .Select(d => new { d.NewsArticleId, d.PlatformType })
+            .ToListAsync(cancellationToken);
+
+        var existingDraftKeys = new HashSet<(Guid ArticleId, SocialPlatformType Platform)>(
+            existingDrafts.Select(d => (d.NewsArticleId, d.PlatformType)));
+
+        var newDraftsCount = 0;
+
         foreach (var article in articlesToProcess)
         {
             foreach (var platform in platforms)
             {
                 try
                 {
-                    var draftExists = await uow.Repository<SocialPostDraft>().Query()
-                        .AnyAsync(d => d.NewsArticleId == article.Id && d.PlatformType == platform, cancellationToken);
-
-                    if (draftExists) continue;
+                    if (existingDraftKeys.Contains((article.Id, platform)))
+                    {
+                        continue;
+                    }
 
                     var content = await postGenerator.GenerateContentForPlatformAsync(platform, article, cancellationToken);
                     if (string.IsNullOrWhiteSpace(content))
@@ -101,29 +112,34 @@ public static class CreateSocialPostDraftsCommandHandler
                         CreatedAt = DateTime.UtcNow
                     };
 
-                    await uow.Repository<SocialPostDraft>().AddAsync(draft, cancellationToken);
-                    await uow.SaveChangesAsync(cancellationToken);
-
                     try
                     {
                         var telegramMsgId = await telegramService.SendDraftToAdminAsync(draft, article, cancellationToken);
                         if (telegramMsgId > 0)
                         {
                             draft.TelegramMessageId = telegramMsgId;
-                            uow.Repository<SocialPostDraft>().Update(draft);
-                            await uow.SaveChangesAsync(cancellationToken);
                         }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Nie udało się wysłać szkicu {DraftId} na Telegram: {Message}", draft.Id, ex.Message);
+                        logger.LogError(ex, "Nie udało się wysłać szkicu na Telegram dla platformy {Platform}: {Message}", platform, ex.Message);
                     }
+
+                    await uow.Repository<SocialPostDraft>().AddAsync(draft, cancellationToken);
+                    existingDraftKeys.Add((article.Id, platform));
+                    newDraftsCount++;
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Błąd podczas tworzenia szkicu dla platformy {Platform}, artykuł {ArticleId}", platform, article.Id);
                 }
             }
+        }
+
+        if (newDraftsCount > 0)
+        {
+            await uow.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Zapisano {Count} nowych szkiców w bazie danych.", newDraftsCount);
         }
 
         logger.LogInformation("Zakończono generowanie szkiców social media.");

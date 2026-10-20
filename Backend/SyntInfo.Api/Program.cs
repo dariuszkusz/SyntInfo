@@ -58,10 +58,11 @@ builder.Services.AddControllers()
     {
         opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
-// Konfiguracja Swagger / OpenAPI, Uwierzytelniania i CORS za pomocą metod rozszerzających
+// Konfiguracja Swagger / OpenAPI, Uwierzytelniania, CORS i Telegram Bot Client za pomocą metod rozszerzających
 builder.Services.AddSwaggerDocumentation();
 builder.Services.AddAdminAuthentication();
-builder.Services.AddCorsPolicy();
+builder.Services.AddCorsPolicy(builder.Configuration);
+builder.Services.AddTelegramBotClient();
 
 // Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
