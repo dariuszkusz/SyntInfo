@@ -23,6 +23,7 @@ public class TelegramController : ControllerBase
     private readonly IUnitOfWork _uow;
     private readonly ITelegramNotificationService _telegramService;
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _env;
     private readonly ILogger<TelegramController> _logger;
 
     public TelegramController(
@@ -30,25 +31,35 @@ public class TelegramController : ControllerBase
         IUnitOfWork uow,
         ITelegramNotificationService telegramService,
         IConfiguration configuration,
+        IWebHostEnvironment env,
         ILogger<TelegramController> logger)
     {
         _bus = bus;
         _uow = uow;
         _telegramService = telegramService;
         _configuration = configuration;
+        _env = env;
         _logger = logger;
     }
 
     [HttpPost("webhook")]
     public async Task<IActionResult> HandleWebhook([FromBody] JsonElement rawUpdate)
     {
-        // Opcjonalna walidacja nagłówka Secret Token
+        // Weryfikacja nagłówka Secret Token (wymuszana w Production/Staging, opcjonalna w Dev jeśli brak konfiguracji)
         var expectedSecret = _configuration["Telegram:SecretToken"];
-        if (!string.IsNullOrWhiteSpace(expectedSecret) && !expectedSecret.Contains("PLACEHOLDER"))
+        var isSecretConfigured = !string.IsNullOrWhiteSpace(expectedSecret) && !expectedSecret.Contains("PLACEHOLDER");
+
+        if (_env.IsProduction() || _env.IsStaging() || isSecretConfigured)
         {
+            if (!isSecretConfigured)
+            {
+                _logger.LogError("Krytyczny błąd bezpieczeństwa: Telegram:SecretToken nie został skonfigurowany w środowisku {Environment}.", _env.EnvironmentName);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Błąd konfiguracji zabezpieczeń serwera.");
+            }
+
             if (!Request.Headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var secretHeader) || secretHeader != expectedSecret)
             {
-                _logger.LogWarning("Odrzucono webhook Telegram: brak lub błędny X-Telegram-Bot-Api-Secret-Token");
+                _logger.LogWarning("Odrzucono webhook Telegram: brak lub błędny nagłówek X-Telegram-Bot-Api-Secret-Token");
                 return Unauthorized();
             }
         }

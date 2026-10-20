@@ -38,6 +38,7 @@ services:
       - Search__TavilyApiKey=${TAVILY_API_KEY}
       - GoogleAiStudio__ApiKey=${PLACEHOLDER_GOOGLE_KEY}
       - Serilog__WriteTo__1__Args__path=${SERILOG_PATH:-/app/logs/log-.txt}
+      - FrontendUrl=${FRONTEND_URL:-https://infoskrot.pl}
     depends_on:
       - db
     networks:

@@ -222,6 +222,7 @@ namespace SyntInfo.Application.CQRS.Handlers
                 }
 
                 _logger.LogInformation("Wyzwalanie tworzenia szkiców postów social media dla nowych artykułów.");
+                cancellationToken.ThrowIfCancellationRequested();
                 await _bus.PublishAsync(new CreateSocialPostDraftsCommand());
             }
         }

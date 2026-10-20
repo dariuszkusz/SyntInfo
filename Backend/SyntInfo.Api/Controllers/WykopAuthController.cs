@@ -49,6 +49,7 @@ public class WykopAuthController : ControllerBase
 
     /// <summary>
     /// Adres zwrotny (Callback) wywoływany przez Wykop po akceptacji uprawnień przez użytkownika.
+    /// Przekierowuje użytkownika do widoku integracji w aplikacji frontendowej (Angular).
     /// </summary>
     [HttpGet("callback")]
     public async Task<IActionResult> Callback(
@@ -56,44 +57,24 @@ public class WykopAuthController : ControllerBase
         [FromQuery] string? rtoken,
         CancellationToken cancellationToken)
     {
+        var frontendUrl = _configuration["FrontendUrl"]?.TrimEnd('/') ?? "http://localhost:4200";
+
         if (string.IsNullOrWhiteSpace(token))
         {
-            return BadRequest(new { Success = false, Error = "Brak parametru token w odpowiedzi z Wykop Connect." });
+            return Redirect($"{frontendUrl}/settings/integrations?error=missing_token");
         }
 
         try
         {
             await _wykopClient.SaveUserTokensAsync(token, rtoken, cancellationToken);
-            _logger.LogInformation("Pomyślnie powiązano konto użytkownika Wykop (token JWT: {TokenPrefix}...).", token[..Math.Min(15, token.Length)]);
+            _logger.LogInformation("Pomyślnie powiązano konto użytkownika Wykop.");
 
-            var html = @"<!DOCTYPE html>
-<html lang=""pl"">
-<head>
-    <meta charset=""UTF-8"">
-    <title>SyntInfo - Wykop Powiązany</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 2.5rem; border-radius: 1rem; border: 1px solid #334155; text-align: center; max-width: 500px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        h1 { color: #38bdf8; margin-top: 0; font-size: 1.6rem; }
-        p { color: #94a3b8; line-height: 1.6; }
-        .badge { display: inline-block; background: #065f46; color: #34d399; padding: 0.4rem 1rem; border-radius: 9999px; font-weight: 600; font-size: 0.9rem; margin-bottom: 1rem; }
-    </style>
-</head>
-<body>
-    <div class=""card"">
-        <div class=""badge"">POŁĄCZONO SUKCESEM</div>
-        <h1>Konto Wykop powiązane!</h1>
-        <p>Token sesyjny użytkownika został pomyślnie zapisany w systemie <strong>SyntInfo</strong>.</p>
-        <p>Możesz teraz zamknąć tę kartę i zatwierdzić publikację posta w bocie na Telegramie.</p>
-    </div>
-</body>
-</html>";
-            return Content(html, "text/html");
+            return Redirect($"{frontendUrl}/settings/integrations?status=wykop_connected");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Błąd podczas zapisu tokenu Wykop Connect");
-            return StatusCode(500, new { Success = false, Error = ex.Message });
+            return Redirect($"{frontendUrl}/settings/integrations?error=save_failed");
         }
     }
 
