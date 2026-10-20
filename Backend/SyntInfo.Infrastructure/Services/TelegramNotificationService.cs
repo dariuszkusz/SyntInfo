@@ -91,12 +91,12 @@ public class TelegramNotificationService : ITelegramNotificationService
 
         try
         {
-            var sentMessage = await client.SendMessage(
+            var sentMessage = await ExecuteWithRetryAsync(() => client.SendMessage(
                 chatId: new ChatId(chatId),
                 text: messageText,
                 parseMode: ParseMode.Html,
                 replyMarkup: inlineKeyboard,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken), cancellationToken);
 
             _logger.LogInformation("Wysłano szkic {DraftId} na Telegram (MessageId: {MessageId})", draft.Id, sentMessage.Id);
             return sentMessage.Id;
@@ -106,6 +106,29 @@ public class TelegramNotificationService : ITelegramNotificationService
             _logger.LogError(ex, "Błąd podczas wysyłania wiadomości Telegram do chatu {ChatId}", chatId);
             throw;
         }
+    }
+
+    private async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
+    {
+        const int maxRetries = 3;
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                return await action();
+            }
+            catch (Telegram.Bot.Exceptions.ApiRequestException ex) when (ex.ErrorCode == 429)
+            {
+                var delaySeconds = ex.Parameters?.RetryAfter ?? (attempt * 2);
+                _logger.LogWarning("Telegram API zwróciło 429 Too Many Requests (Rate Limit). Oczekiwanie {Seconds}s przed ponowieniem próby {Attempt}/{MaxRetries}",
+                    delaySeconds, attempt, maxRetries);
+
+                if (attempt == maxRetries) throw;
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
+            }
+        }
+
+        return await action();
     }
 
     public async Task UpdateDraftMessageAsync(long messageId, SocialPostDraft draft, string decisionSummary, CancellationToken cancellationToken = default)
@@ -188,12 +211,12 @@ public class TelegramNotificationService : ITelegramNotificationService
 
         try
         {
-            var msg = await client.SendMessage(
+            var msg = await ExecuteWithRetryAsync(() => client.SendMessage(
                 chatId: new ChatId(chatId),
                 text: text,
                 parseMode: ParseMode.Html,
                 replyMarkup: keyboard,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken), cancellationToken);
 
             return msg.Id;
         }
@@ -272,12 +295,12 @@ public class TelegramNotificationService : ITelegramNotificationService
 
         try
         {
-            var msg = await client.SendMessage(
+            var msg = await ExecuteWithRetryAsync(() => client.SendMessage(
                 chatId: new ChatId(chatId),
                 text: text,
                 parseMode: ParseMode.Html,
                 replyMarkup: keyboard,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken), cancellationToken);
 
             return msg.Id;
         }
@@ -302,11 +325,11 @@ public class TelegramNotificationService : ITelegramNotificationService
 
         try
         {
-            var msg = await client.SendMessage(
+            var msg = await ExecuteWithRetryAsync(() => client.SendMessage(
                 chatId: new ChatId(chatId),
                 text: message,
                 parseMode: ParseMode.Html,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken), cancellationToken);
 
             return msg.Id;
         }

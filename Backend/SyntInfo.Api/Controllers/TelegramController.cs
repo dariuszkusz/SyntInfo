@@ -8,11 +8,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Wolverine;
 
-using SyntInfo.Application.Interfaces;
 using SyntInfo.Domain.Entities;
-using SyntInfo.Domain.Interfaces;
-using Microsoft.EntityFrameworkCore;
-
 using Microsoft.AspNetCore.Authorization;
 
 namespace SyntInfo.Api.Controllers;
@@ -23,8 +19,6 @@ namespace SyntInfo.Api.Controllers;
 public class TelegramController : ControllerBase
 {
     private readonly IMessageBus _bus;
-    private readonly IUnitOfWork _uow;
-    private readonly ITelegramNotificationService _telegramService;
     private readonly ITelegramBotClient _botClient;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _env;
@@ -32,16 +26,12 @@ public class TelegramController : ControllerBase
 
     public TelegramController(
         IMessageBus bus,
-        IUnitOfWork uow,
-        ITelegramNotificationService telegramService,
         ITelegramBotClient botClient,
         IConfiguration configuration,
         IWebHostEnvironment env,
         ILogger<TelegramController> logger)
     {
         _bus = bus;
-        _uow = uow;
-        _telegramService = telegramService;
         _botClient = botClient;
         _configuration = configuration;
         _env = env;
@@ -50,7 +40,7 @@ public class TelegramController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("webhook")]
-    public async Task<IActionResult> HandleWebhook([FromBody] JsonElement rawUpdate)
+    public async Task<IActionResult> HandleWebhook([FromBody] JsonElement rawUpdate, CancellationToken cancellationToken)
     {
         // Weryfikacja nagłówka Secret Token (wymuszana w Production/Staging, opcjonalna w Dev jeśli brak konfiguracji)
         var expectedSecret = _configuration["Telegram:SecretToken"];
@@ -100,7 +90,7 @@ public class TelegramController : ControllerBase
             {
                 try
                 {
-                    await _botClient.AnswerCallbackQuery(callback.Id, "Przetwarzanie decyzji...");
+                    await _botClient.AnswerCallbackQuery(callback.Id, "Przetwarzanie decyzji...", cancellationToken: cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -200,102 +190,35 @@ public class TelegramController : ControllerBase
 
     /// <summary>
     /// Wysyła testowy szkic posta bezpośrednio do administratora na Telegram z przyciskami [✅ Opublikuj] i [❌ Odrzuć].
+    /// Deleguje logikę do handlera CQRS (SendTestSocialDraftCommandHandler).
     /// </summary>
     [HttpPost("send-test-draft")]
-    public async Task<IActionResult> SendTestDraft([FromQuery] SocialPlatformType platform = SocialPlatformType.Wykop)
+    public async Task<IActionResult> SendTestDraft(
+        [FromQuery] SocialPlatformType platform = SocialPlatformType.Wykop,
+        CancellationToken cancellationToken = default)
     {
-        // 1. Sprawdź lub utwórz przykładowy artykuł
-        var article = await _uow.Repository<NewsArticle>().Query()
-            .FirstOrDefaultAsync(HttpContext.RequestAborted);
+        var result = await _bus.InvokeAsync<SendTestDraftResult>(
+            new SendTestSocialDraftCommand(platform),
+            cancellationToken);
 
-        if (article == null)
-        {
-            article = new NewsArticle
-            {
-                Title = "Przełom w fuzji jądrowej - SyntInfo AI",
-                OriginalTitle = "Breakthrough in Nuclear Fusion",
-                SummaryText = "Europejscy inżynierowie osiągnęli stabilną plazmę fuzyjną przez ponad 12 minut. Jest to rekordowy wynik przybliżający komercyjne reaktory nowej generacji.",
-                PublishedAt = DateTime.UtcNow,
-                SourceUrls = new List<string> { "https://syntinfo.local/news/fusion" },
-                IsActive = true
-            };
-            await _uow.Repository<NewsArticle>().AddAsync(article, HttpContext.RequestAborted);
-            await _uow.SaveChangesAsync(HttpContext.RequestAborted);
-        }
-
-        // 2. Utwórz szkic posta z wyraźnym oznaczeniem testowym
-        var draft = new SocialPostDraft
-        {
-            NewsArticleId = article.Id,
-            PlatformType = platform,
-            Content = $"[TEST - NIE KLIKAĆ]\n⚡ {article.Title}\n\n{article.SummaryText}\n\n🔗 Czytaj więcej: {article.SourceUrls.FirstOrDefault()}\n#technologia #nauka #syntinfo #test",
-            Status = SocialPostStatus.Draft,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _uow.Repository<SocialPostDraft>().AddAsync(draft, HttpContext.RequestAborted);
-        await _uow.SaveChangesAsync(HttpContext.RequestAborted);
-
-        // 3. Wyślij do administratora przez TelegramNotificationService
-        try
-        {
-            var msgId = await _telegramService.SendDraftToAdminAsync(draft, article, HttpContext.RequestAborted);
-            if (msgId > 0)
-            {
-                draft.TelegramMessageId = msgId;
-                _uow.Repository<SocialPostDraft>().Update(draft);
-                await _uow.SaveChangesAsync(HttpContext.RequestAborted);
-            }
-
-            return Ok(new
-            {
-                Success = true,
-                DraftId = draft.Id,
-                Platform = platform.ToString(),
-                TelegramMessageId = msgId,
-                Message = $"Wysłano testowy szkic posta ({platform}) na Telegram!"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Błąd wysyłania testowego szkicu do Telegrama");
-            return StatusCode(500, new { Success = false, Error = ex.Message });
-        }
+        return result.Success ? Ok(result) : StatusCode(500, result);
     }
 
     /// <summary>
     /// Wysyła partię najnowszych artykułów do selekcji przez administratora na Telegramie
     /// wraz z panelem sterowania do wygenerowania i publikacji zbiorczego wydania InfoSkrót.
+    /// Deleguje logikę do handlera CQRS (SendCurationBatchCommandHandler).
     /// </summary>
     [HttpPost("send-curation-batch")]
-    public async Task<IActionResult> SendCurationBatch([FromQuery] int count = 5)
+    public async Task<IActionResult> SendCurationBatch(
+        [FromQuery] int count = 5,
+        CancellationToken cancellationToken = default)
     {
-        var articles = await _uow.Repository<NewsArticle>().Query()
-            .Where(a => a.IsActive && a.DigestPublishedAt == null)
-            .OrderByDescending(a => a.PublishedAt)
-            .Take(count)
-            .ToListAsync(HttpContext.RequestAborted);
+        var result = await _bus.InvokeAsync<SendCurationBatchResult>(
+            new SendCurationBatchCommand(count),
+            cancellationToken);
 
-        if (!articles.Any())
-        {
-            return Ok(new { Success = true, Message = "Brak nowych artykułów oczekujących na selekcję do wydania." });
-        }
-
-        var selectedCount = 0;
-        foreach (var article in articles)
-        {
-            if (article.IsSelectedForDigest) selectedCount++;
-            await _telegramService.SendArticleForCurationAsync(article, article.IsSelectedForDigest, HttpContext.RequestAborted);
-        }
-
-        await _telegramService.SendDigestControlPanelAsync(selectedCount, HttpContext.RequestAborted);
-
-        return Ok(new
-        {
-            Success = true,
-            SentCount = articles.Count,
-            Message = $"Wysłano {articles.Count} artykułów do selekcji na Telegram wraz z panelem publikacji wydania."
-        });
+        return Ok(result);
     }
 }
 

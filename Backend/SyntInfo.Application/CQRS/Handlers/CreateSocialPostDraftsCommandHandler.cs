@@ -119,6 +119,9 @@ public static class CreateSocialPostDraftsCommandHandler
                         {
                             draft.TelegramMessageId = telegramMsgId;
                         }
+
+                        // Throttling: zapobiega przekroczeniu limitu Telegram Bot API (1 msg/s per chat)
+                        await Task.Delay(400, cancellationToken);
                     }
                     catch (Exception ex)
                     {

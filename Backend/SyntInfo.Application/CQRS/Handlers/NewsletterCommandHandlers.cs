@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using SyntInfo.Application.CQRS.Commands;
 using SyntInfo.Application.Interfaces;
@@ -7,7 +7,13 @@ namespace SyntInfo.Application.CQRS.Handlers;
 
 public static class SubscribeNewsletterCommandHandler
 {
-    private static readonly EmailAddressAttribute EmailValidator = new();
+    private static bool IsValidEmail([NotNullWhen(true)] string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return false;
+        return System.Net.Mail.MailAddress.TryCreate(email, out var address) 
+               && address.Address == email 
+               && email.Contains('.');
+    }
 
     public static async Task<NewsletterOperationResult> Handle(
         SubscribeNewsletterCommand command,
@@ -17,7 +23,7 @@ public static class SubscribeNewsletterCommandHandler
     {
         var email = command.Email?.Trim();
 
-        if (string.IsNullOrWhiteSpace(email) || !EmailValidator.IsValid(email))
+        if (!IsValidEmail(email))
         {
             logger.LogWarning("Niepoprawny format adresu e-mail: '{Email}'", command.Email);
             return new NewsletterOperationResult(false, "Podaj poprawny adres e-mail.");
@@ -45,7 +51,13 @@ public static class SubscribeNewsletterCommandHandler
 
 public static class UnsubscribeNewsletterCommandHandler
 {
-    private static readonly EmailAddressAttribute EmailValidator = new();
+    private static bool IsValidEmail([NotNullWhen(true)] string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return false;
+        return System.Net.Mail.MailAddress.TryCreate(email, out var address) 
+               && address.Address == email 
+               && email.Contains('.');
+    }
 
     public static async Task<NewsletterOperationResult> Handle(
         UnsubscribeNewsletterCommand command,
@@ -55,7 +67,7 @@ public static class UnsubscribeNewsletterCommandHandler
     {
         var email = command.Email?.Trim();
 
-        if (string.IsNullOrWhiteSpace(email) || !EmailValidator.IsValid(email))
+        if (!IsValidEmail(email))
         {
             logger.LogWarning("Niepoprawny format adresu e-mail przy wypisie: '{Email}'", command.Email);
             return new NewsletterOperationResult(false, "Podaj poprawny adres e-mail.");

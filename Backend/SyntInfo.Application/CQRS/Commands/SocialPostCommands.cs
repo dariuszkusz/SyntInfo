@@ -41,3 +41,27 @@ public record PublishDigestIssueCommand(
     long? TelegramChatId = null,
     long? TelegramMessageId = null);
 
+/// <summary>
+/// Komenda wysyłająca testowy szkic posta na Telegram administratora do weryfikacji.
+/// </summary>
+public record SendTestSocialDraftCommand(SocialPlatformType Platform = SocialPlatformType.Wykop);
+
+public record SendTestDraftResult(
+    bool Success,
+    Guid? DraftId,
+    string? Platform,
+    long TelegramMessageId,
+    string Message,
+    string? Error = null);
+
+/// <summary>
+/// Komenda wysyłająca partię artykułów do selekcji na Telegramie wraz z panelem sterowania wydaniem.
+/// </summary>
+public record SendCurationBatchCommand(int Count = 5);
+
+public record SendCurationBatchResult(
+    bool Success,
+    int SentCount,
+    string Message,
+    string? Error = null);
+
