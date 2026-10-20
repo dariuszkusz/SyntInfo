@@ -19,6 +19,7 @@ public static class PublishDigestIssueCommandHandler
         IHejtoClient hejtoClient,
         IMailerLiteClient mailerLiteClient,
         ITelegramNotificationService telegramService,
+        Microsoft.Extensions.Configuration.IConfiguration configuration,
         ILogger<PublishDigestIssueCommand> logger,
         CancellationToken cancellationToken)
     {
@@ -91,18 +92,27 @@ public static class PublishDigestIssueCommandHandler
         }
 
         // 3. Publikacja Newslettera (MailerLite)
-        try
+        var isNewsletterEnabled = bool.TryParse(configuration["SocialPlatforms:MailerLite:Enabled"], out var isEnabled) && isEnabled;
+        if (isNewsletterEnabled)
         {
-            var newsletterContent = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Newsletter, selectedArticles, cancellationToken);
-            var issueTitle = $"InfoSkrót — Wydanie z {DateTime.UtcNow:dd.MM.yyyy}";
-            var htmlBody = $"<div style=\"font-family: Arial, sans-serif; line-height: 1.6;\"><h2>{issueTitle}</h2><p>{newsletterContent.Replace("\n", "<br/>")}</p></div>";
-            await mailerLiteClient.SendNewsletterCampaignAsync(issueTitle, htmlBody, newsletterContent, cancellationToken);
-            newsletterResult = "✅ Kampania e-mail wysłana";
+            try
+            {
+                var newsletterHtml = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Newsletter, selectedArticles, cancellationToken);
+                var newsletterPlain = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Facebook, selectedArticles, cancellationToken);
+                var issueTitle = $"InfoSkrót — Wydanie z {DateTime.UtcNow:dd.MM.yyyy}";
+                await mailerLiteClient.SendNewsletterCampaignAsync(issueTitle, newsletterHtml, newsletterPlain, cancellationToken);
+                newsletterResult = "✅ Kampania e-mail wysłana";
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Błąd podczas wysyłania kampanii newslettera");
+                newsletterResult = $"❌ Błąd: {ex.Message}";
+            }
         }
-        catch (Exception ex)
+        else
         {
-            logger.LogError(ex, "Błąd podczas wysyłania kampanii newslettera");
-            newsletterResult = $"❌ Błąd: {ex.Message}";
+            logger.LogInformation("Wysyłka newslettera jest wyłączona w konfiguracji.");
+            newsletterResult = "⏸️ Wyłączony";
         }
 
         // 4. Oznaczenie artykułów jako opublikowane w wydaniu

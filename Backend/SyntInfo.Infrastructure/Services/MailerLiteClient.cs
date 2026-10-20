@@ -30,8 +30,8 @@ public class MailerLiteClient : IMailerLiteClient
     public async Task<string> SendNewsletterCampaignAsync(string subject, string htmlContent, string plainTextContent, CancellationToken cancellationToken = default)
     {
         var apiKey = _configuration["SocialPlatforms:MailerLite:ApiKey"];
-        var fromEmail = _configuration["SocialPlatforms:MailerLite:FromEmail"] ?? "newsletter@syntinfo.local";
-        var fromName = _configuration["SocialPlatforms:MailerLite:FromName"] ?? "SyntInfo";
+        var fromEmail = _configuration["SocialPlatforms:MailerLite:FromEmail"] ?? "infoskrot.app@gmail.com";
+        var fromName = _configuration["SocialPlatforms:MailerLite:FromName"] ?? "InfoSkrót";
         var isMock = _configuration.GetValue("SocialPlatforms:MailerLite:UseMock", false);
 
         if (isMock || string.IsNullOrWhiteSpace(apiKey) || apiKey.Contains("PLACEHOLDER"))
@@ -44,7 +44,7 @@ public class MailerLiteClient : IMailerLiteClient
         var baseUri = GetBaseUri();
 
         // Krok 1: Tworzenie kampanii
-        var campaignName = $"SyntInfo - {DateTime.UtcNow:yyyy-MM-dd HH:mm} - {subject}";
+        var campaignName = $"InfoSkrót - {DateTime.UtcNow:yyyy-MM-dd HH:mm} - {subject}";
         if (campaignName.Length > 250) campaignName = campaignName[..250];
 
         var createPayload = new
