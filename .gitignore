@@ -39,6 +39,9 @@ frontend/ios/App/build/
 
 # === Infrastructure / Docker ===
 Infrastructure/pgdata/
+.env
+.env.*
+!.env.example
 
 # === System Files ===
 .DS_Store

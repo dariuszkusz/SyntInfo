@@ -13,10 +13,13 @@ using SyntInfo.Domain.Entities;
 using SyntInfo.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace SyntInfo.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin")]
 public class TelegramController : ControllerBase
 {
     private readonly IMessageBus _bus;
@@ -42,6 +45,7 @@ public class TelegramController : ControllerBase
         _logger = logger;
     }
 
+    [AllowAnonymous]
     [HttpPost("webhook")]
     public async Task<IActionResult> HandleWebhook([FromBody] JsonElement rawUpdate)
     {
@@ -73,7 +77,7 @@ public class TelegramController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Błąd deserializacji aktualizacji Telegram z webhooka");
-            return BadRequest();
+            return Ok(); // Status 200 OK zapobiega pętli ponowień (retry) przez serwer Telegrama
         }
 
         if (update == null)

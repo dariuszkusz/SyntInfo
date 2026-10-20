@@ -47,6 +47,7 @@ public static class CreateSocialPostDraftsCommandHandler
                 .ToListAsync(cancellationToken);
 
             var existingDraftArticleIds = await uow.Repository<SocialPostDraft>().Query()
+                .Where(d => d.CreatedAt >= cutoff)
                 .Select(d => d.NewsArticleId)
                 .Distinct()
                 .ToListAsync(cancellationToken);

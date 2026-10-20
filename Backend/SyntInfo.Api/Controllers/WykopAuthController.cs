@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -8,6 +9,7 @@ namespace SyntInfo.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Route("api/Wykop")]
+[Authorize(Roles = "Admin")]
 public class WykopAuthController : ControllerBase
 {
     private readonly IWykopClient _wykopClient;
@@ -51,6 +53,7 @@ public class WykopAuthController : ControllerBase
     /// Adres zwrotny (Callback) wywoływany przez Wykop po akceptacji uprawnień przez użytkownika.
     /// Przekierowuje użytkownika do widoku integracji w aplikacji frontendowej (Angular).
     /// </summary>
+    [AllowAnonymous]
     [HttpGet("callback")]
     public async Task<IActionResult> Callback(
         [FromQuery] string? token,

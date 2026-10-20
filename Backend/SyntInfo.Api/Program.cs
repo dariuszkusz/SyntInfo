@@ -6,6 +6,7 @@ using SyntInfo.Application.Interfaces;
 using SyntInfo.Domain.Interfaces;
 using Wolverine;
 using Scalar.AspNetCore;
+using SyntInfo.Api.Extensions;
 
 
 try
@@ -57,19 +58,10 @@ builder.Services.AddControllers()
     {
         opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
-// Generowanie specyfikacji OpenAPI dla interfejsu Scalar
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAngular", policy =>
-    {
-        policy.SetIsOriginAllowed(_ => true)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
-});
+// Konfiguracja Swagger / OpenAPI, Uwierzytelniania i CORS za pomocą metod rozszerzających
+builder.Services.AddSwaggerDocumentation();
+builder.Services.AddAdminAuthentication();
+builder.Services.AddCorsPolicy();
 
 // Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -175,6 +167,7 @@ if (app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseCors("AllowAngular");
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
