@@ -220,6 +220,10 @@ namespace SyntInfo.Application.CQRS.Handlers
                 {
                     await _bus.InvokeAsync(cmd, cancellationToken);
                 }
+
+                _logger.LogInformation("Wyzwalanie tworzenia szkiców postów social media dla nowych artykułów.");
+                cancellationToken.ThrowIfCancellationRequested();
+                await _bus.PublishAsync(new CreateSocialPostDraftsCommand());
             }
         }
 

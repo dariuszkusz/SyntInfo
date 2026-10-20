@@ -5,11 +5,12 @@ import { NgIconComponent, provideIcons } from '@ng-icons/core';
 import { flagPl } from '@ng-icons/flag-icons';
 import { lucideGlobe, lucideLayers, lucideX, lucideFilter } from '@ng-icons/lucide';
 import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffee-button/buy-me-coffee-button.component';
+import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/newsletter-box.component';
 
 @Component({
   selector: 'app-news-feed',
   standalone: true,
-  imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent],
+  imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent, NewsletterBoxComponent],
   providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter })],
   template: `
     <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
@@ -207,6 +208,11 @@ import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffe
             }
           </div>
         }
+
+        <!-- Newsletter Subscription Box -->
+        <div class="mt-12">
+          <app-newsletter-box></app-newsletter-box>
+        </div>
       </main>
 
       <!-- Footer -->
