@@ -52,10 +52,11 @@ jobs:
         run: npm run build
 
       - name: Run Cypress Tests
-        uses: cypress-io/github-action@v6
+        uses: cypress-io/github-action@v7
         with:
           working-directory: frontend
           build: npm run build
           start: npm start
           wait-on: 'http://localhost:4200'
+          wait-on-timeout: 120
           browser: chrome
