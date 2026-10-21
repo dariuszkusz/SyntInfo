@@ -70,6 +70,10 @@ builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.
 {
     client.Timeout = TimeSpan.FromMinutes(10);
 });
+builder.Services.AddHttpClient<INewsDiscoveryService, SyntInfo.Infrastructure.Services.TavilyNewsDiscoveryService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 builder.Services.AddHttpClient(string.Empty)
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {

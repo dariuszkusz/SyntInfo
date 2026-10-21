@@ -24,6 +24,7 @@ namespace SyntInfo.Application.CQRS.Handlers
         private readonly ILogger<TriggerRssFetchCommandHandler> _logger;
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly INewsDiscoveryService _newsDiscoveryService;
 
         public TriggerRssFetchCommandHandler(
             IUnitOfWork uow,
@@ -32,7 +33,8 @@ namespace SyntInfo.Application.CQRS.Handlers
             IGoogleAiStudioClient googleAiStudioClient,
             ILogger<TriggerRssFetchCommandHandler> logger,
             IConfiguration configuration,
-            IHttpClientFactory httpClientFactory)
+            IHttpClientFactory httpClientFactory,
+            INewsDiscoveryService newsDiscoveryService)
         {
             _uow = uow;
             _bus = bus;
@@ -41,6 +43,7 @@ namespace SyntInfo.Application.CQRS.Handlers
             _logger = logger;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
+            _newsDiscoveryService = newsDiscoveryService;
         }
 
         [MessageTimeout(1800)] // 30 minut (potrzebne, bo artykuły są przetwarzane sekwencyjnie przez InvokeAsync)
@@ -240,45 +243,20 @@ namespace SyntInfo.Application.CQRS.Handlers
             var discovered = new List<SummarizeArticleCommand>();
             try
             {
-                string query = region switch
+                var items = await _newsDiscoveryService.DiscoverNewsAsync(region, cancellationToken);
+                foreach (var item in items)
                 {
-                    SourceRegion.Poland => "najważniejsze wiadomości z Polski z ostatnich 24 godzin",
-                    SourceRegion.Positive => "pozytywne dobre wiadomości ze świata nauka sukcesy inspirujące ostatnie 24 godziny",
-                    _ => "top world news headlines last 24 hours"
-                };
-
-                // Używamy bezpośrednio HttpClient do Tavily, aby dostać listę linków, a nie tylko Answer
-                var apiKey = _configuration["Search:TavilyApiKey"];
-                if (string.IsNullOrEmpty(apiKey) || apiKey.Contains("PLACEHOLDER")) return discovered;
-
-                var client = _httpClientFactory.CreateClient();
-                var request = new
-                {
-                    api_key = apiKey,
-                    query = query,
-                    search_depth = "advanced",
-                    max_results = 8
-                };
-
-                var response = await client.PostAsJsonAsync("https://api.tavily.com/search", request, cancellationToken);
-                if (!response.IsSuccessStatusCode) return discovered;
-
-                var result = await response.Content.ReadFromJsonAsync<TavilySearchResponse>(cancellationToken: cancellationToken);
-                if (result?.Results == null) return discovered;
-
-                foreach (var res in result.Results)
-                {
-                    // Sprawdź czy już nie mamy tego linku
+                    // Sprawdź czy już nie mamy tego linku lub tytułu w bazie
                     var exists = await _uow.Repository<NewsArticle>().Query()
-                        .AnyAsync(a => a.SourceUrls.Contains(res.Url) || a.Title == res.Title, cancellationToken);
+                        .AnyAsync(a => a.SourceUrls.Contains(item.Url) || a.Title == item.Title, cancellationToken);
 
                     if (!exists)
                     {
                         discovered.Add(new SummarizeArticleCommand(
-                            res.Title,
-                            res.Content, // Tavily daje fragment treści
-                            res.Url,
-                            DateTime.UtcNow,
+                            item.Title,
+                            item.Content,
+                            item.Url,
+                            item.PublishedAt,
                             Guid.Empty, // Brak konkretnego źródła RSS
                             region
                         ));
@@ -289,6 +267,7 @@ namespace SyntInfo.Application.CQRS.Handlers
             {
                 _logger.LogError(ex, "Błąd podczas Discovery dla regionu {Region}", region);
             }
+
             return discovered;
         }
 

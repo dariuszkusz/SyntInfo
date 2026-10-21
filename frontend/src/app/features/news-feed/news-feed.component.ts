@@ -270,6 +270,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
 export class NewsFeedComponent implements OnInit {
   readonly store = inject(NewsStore);
   readonly isDevMode = isDevMode();
+  // TODO: Restore when newsletter MailerLite integration is fully activated and verified
   readonly showNewsletter = false;
 
   ngOnInit() {
