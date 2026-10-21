@@ -18,14 +18,17 @@ namespace SyntInfo.Application.CQRS.Handlers
         {
             var polandQuery = new GetNewsArticlesQuery(1, 10, SourceRegion.Poland);
             var worldQuery = new GetNewsArticlesQuery(1, 10, SourceRegion.World);
+            var positiveQuery = new GetNewsArticlesQuery(1, 3, SourceRegion.Positive);
 
             var polandNews = await _bus.InvokeAsync<List<NewsArticleDto>>(polandQuery, cancellationToken);
             var worldNews = await _bus.InvokeAsync<List<NewsArticleDto>>(worldQuery, cancellationToken);
+            var positiveNews = await _bus.InvokeAsync<List<NewsArticleDto>>(positiveQuery, cancellationToken);
 
             return new TopNewsResponse
             {
                 Poland = polandNews,
-                World = worldNews
+                World = worldNews,
+                Positive = positiveNews
             };
         }
     }

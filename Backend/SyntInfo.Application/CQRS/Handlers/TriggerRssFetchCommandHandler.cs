@@ -183,6 +183,13 @@ namespace SyntInfo.Application.CQRS.Handlers
                 newArticlesToProcess.AddRange(discovered);
             }
 
+            if (!newArticlesToProcess.Any(a => a.Region == SourceRegion.Positive))
+            {
+                _logger.LogInformation("Brak nowych artykułów z RSS dla Pozytywnych wiadomości. Uruchamiam Discovery przez Tavily...");
+                var discovered = await DiscoverNewsWithTavilyAsync(SourceRegion.Positive, cancellationToken);
+                newArticlesToProcess.AddRange(discovered);
+            }
+
             _logger.LogInformation("Rozpoczęto generowanie embeddingów dla {Count} nowych artykułów.", newArticlesToProcess.Count);
             var candidatesWithEmbeddings = new List<(SummarizeArticleCommand Command, float[] Embedding)>();
             foreach (var candidate in newArticlesToProcess)
@@ -212,6 +219,7 @@ namespace SyntInfo.Application.CQRS.Handlers
             var allCommands = new List<SummarizeArticleCommand>();
             allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.World, clusteredCandidates.Where(a => a.Region == SourceRegion.World).ToList(), maxPerRegion, cancellationToken));
             allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.Poland, clusteredCandidates.Where(a => a.Region == SourceRegion.Poland).ToList(), maxPerRegion, cancellationToken));
+            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.Positive, clusteredCandidates.Where(a => a.Region == SourceRegion.Positive).ToList(), 3, cancellationToken));
 
             if (allCommands.Any())
             {
@@ -232,9 +240,12 @@ namespace SyntInfo.Application.CQRS.Handlers
             var discovered = new List<SummarizeArticleCommand>();
             try
             {
-                string query = region == SourceRegion.Poland
-                    ? "najważniejsze wiadomości z Polski z ostatnich 24 godzin"
-                    : "top world news headlines last 24 hours";
+                string query = region switch
+                {
+                    SourceRegion.Poland => "najważniejsze wiadomości z Polski z ostatnich 24 godzin",
+                    SourceRegion.Positive => "pozytywne dobre wiadomości ze świata nauka sukcesy inspirujące ostatnie 24 godziny",
+                    _ => "top world news headlines last 24 hours"
+                };
 
                 // Używamy bezpośrednio HttpClient do Tavily, aby dostać listę linków, a nie tylko Answer
                 var apiKey = _configuration["Search:TavilyApiKey"];
