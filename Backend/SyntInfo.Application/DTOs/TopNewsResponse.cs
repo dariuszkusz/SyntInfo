@@ -4,5 +4,6 @@ namespace SyntInfo.Application.DTOs
     {
         public List<NewsArticleDto> Poland { get; set; } = new();
         public List<NewsArticleDto> World { get; set; } = new();
+        public List<NewsArticleDto> Positive { get; set; } = new();
     }
 }

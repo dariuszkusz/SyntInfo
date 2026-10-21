@@ -4,7 +4,8 @@ import { Observable } from 'rxjs';
 
 export enum SourceRegion {
   Poland = 0,
-  World = 1
+  World = 1,
+  Positive = 2
 }
 
 export interface NewsArticle {
@@ -22,6 +23,7 @@ export interface NewsArticle {
 export interface TopNewsResponse {
   poland: NewsArticle[];
   world: NewsArticle[];
+  positive: NewsArticle[];
 }
 
 @Injectable({

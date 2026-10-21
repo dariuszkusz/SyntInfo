@@ -3,7 +3,8 @@ namespace SyntInfo.Domain.Entities;
 public enum SourceRegion
 {
     Poland,
-    World
+    World,
+    Positive
 }
 
 public class NewsSource
