@@ -123,46 +123,118 @@ public class SocialPostGenerator : ISocialPostGenerator
                 break;
 
             case SocialPlatformType.Newsletter:
-                sb.AppendLine($"<div style=\"font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; color: #1e293b;\">");
-                sb.AppendLine($"  <h1 style=\"color: #0284c7; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;\"><a href=\"https://www.infoskrót.pl\" style=\"text-decoration: none; color: #0284c7;\">InfoSkrót</a> — Wydanie z {dateStr}</h1>");
-                sb.AppendLine($"  <p style=\"color: #64748b;\">Poniżej znajdziesz najważniejsze wiadomości wybrane przez redakcję InfoSkrót.</p>");
-                sb.AppendLine($"  <hr style=\"border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;\" />");
+                sb.AppendLine("<!DOCTYPE html><html lang=\"pl\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>InfoSkrót</title></head>");
+                sb.AppendLine("<body style=\"margin: 0; padding: 0; background-color: #E7F6F2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #2C3333; -webkit-font-smoothing: antialiased;\">");
+                sb.AppendLine("  <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"background-color: #E7F6F2; padding: 24px 12px;\">");
+                sb.AppendLine("    <tr><td align=\"center\">");
+                sb.AppendLine("      <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"max-width: 640px; margin: 0 auto;\">");
+                
+                // Header / Logo / Buy coffee
+                sb.AppendLine("        <tr><td style=\"padding-bottom: 24px;\">");
+                sb.AppendLine("          <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">");
+                sb.AppendLine("            <tr>");
+                sb.AppendLine("              <td valign=\"middle\" align=\"left\">");
+                sb.AppendLine("                <table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">");
+                sb.AppendLine("                  <tr>");
+                sb.AppendLine("                    <td style=\"vertical-align: middle; padding-right: 12px;\">");
+                sb.AppendLine("                      <div style=\"background-color: #0d9488; color: #ffffff; font-weight: 800; font-size: 15px; width: 36px; height: 36px; line-height: 36px; text-align: center; border-radius: 10px; letter-spacing: -0.5px;\">IS</div>");
+                sb.AppendLine("                    </td>");
+                sb.AppendLine("                    <td style=\"vertical-align: middle;\">");
+                sb.AppendLine("                      <div style=\"font-size: 24px; font-weight: 800; line-height: 1; color: #2C3333; letter-spacing: -0.5px;\">Info<span style=\"color: #0d9488; font-style: italic;\">Skrót</span></div>");
+                sb.AppendLine("                      <div style=\"font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; color: #64748b; margin-top: 4px;\">SKRÓT NAJWAŻNIEJSZYCH INFORMACJI</div>");
+                sb.AppendLine("                    </td>");
+                sb.AppendLine("                  </tr>");
+                sb.AppendLine("                </table>");
+                sb.AppendLine("              </td>");
+                sb.AppendLine("              <td valign=\"middle\" align=\"right\">");
+                sb.AppendLine("                <a href=\"https://buycoffee.to/infoskrot\" target=\"_blank\" style=\"display: inline-block; background-color: #f59e0b; color: #2C3333; text-decoration: none; font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 9999px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);\">&#x2615; Postaw kawę</a>");
+                sb.AppendLine("              </td>");
+                sb.AppendLine("            </tr>");
+                sb.AppendLine("          </table>");
+                sb.AppendLine("        </td></tr>");
 
+                // Info bar
+                sb.AppendLine("        <tr><td style=\"padding-bottom: 16px;\">");
+                sb.AppendLine("          <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">");
+                sb.AppendLine("            <tr>");
+                sb.AppendLine($"              <td align=\"left\" style=\"font-size: 12px; font-weight: 600; color: #395B64;\">Wydanie codzienne &bull; {dateStr}</td>");
+                sb.AppendLine("              <td align=\"right\" style=\"font-size: 12px; font-weight: 600; color: #0d9488;\">&#x23F1; 3 minuty czytania bez klikania</td>");
+                sb.AppendLine("            </tr>");
+                sb.AppendLine("          </table>");
+                sb.AppendLine("        </td></tr>");
+
+                // Article Cards
                 for (int i = 0; i < articles.Count; i++)
                 {
                     var a = articles[i];
-                    var url = a.SourceUrls.FirstOrDefault() ?? "https://www.infoskrót.pl";
-                    sb.AppendLine($"  <div style=\"margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #f1f5f9;\">");
-                    sb.AppendLine($"    <h3 style=\"margin-top: 0; color: #0f172a;\">{i + 1}. {a.Title}</h3>");
+                    var primaryUrl = a.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+                    var categoryName = !string.IsNullOrWhiteSpace(a.Category?.Name) ? a.Category.Name : "WIADOMOŚCI";
+                    var regionTag = a.Region switch
+                    {
+                        Domain.Entities.SourceRegion.World => "&#x1F310; ŚWIAT",
+                        Domain.Entities.SourceRegion.Positive => "&#x1F60A; POZYTYWNE",
+                        _ => "&#x1F1F5;&#x1F1F1; POLSKA"
+                    };
+                    var domainHost = "infoskrot.pl";
+                    try { if (Uri.TryCreate(primaryUrl, UriKind.Absolute, out var uri)) domainHost = uri.Host.Replace("www.", ""); } catch { }
 
+                    sb.AppendLine("        <tr><td style=\"padding-bottom: 20px;\">");
+                    sb.AppendLine("          <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"background-color: #ffffff; border-radius: 24px; border: 1px solid #d8ede7; box-shadow: 0 4px 16px rgba(44, 51, 51, 0.04); overflow: hidden;\">");
+                    sb.AppendLine("            <tr><td style=\"padding: 24px;\">");
+                    
+                    // Card Meta
+                    sb.AppendLine("              <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"margin-bottom: 14px;\">");
+                    sb.AppendLine("                <tr>");
+                    sb.AppendLine($"                  <td align=\"left\"><span style=\"display: inline-block; background-color: #E7F6F2; color: #2C3333; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; padding: 4px 10px; border-radius: 9999px;\">{System.Net.WebUtility.HtmlEncode(categoryName)}</span></td>");
+                    sb.AppendLine($"                  <td align=\"right\" style=\"font-size: 12px; font-weight: 600; color: #64748b;\"><span style=\"background-color: #E7F6F2; color: #2C3333; padding: 3px 8px; border-radius: 6px; font-size: 11px; margin-right: 6px;\">{regionTag}</span> <span style=\"opacity: 0.7;\">{a.PublishedAt:dd.MM, HH:mm}</span></td>");
+                    sb.AppendLine("                </tr>");
+                    sb.AppendLine("              </table>");
+
+                    // Title
+                    sb.AppendLine($"              <h2 style=\"margin: 0 0 14px 0; font-size: 21px; font-weight: 800; line-height: 1.35; color: #2C3333;\">{System.Net.WebUtility.HtmlEncode(a.Title)}</h2>");
+
+                    // Body: Text + Image layout
+                    sb.AppendLine("              <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"margin-bottom: 18px;\">");
+                    sb.AppendLine("                <tr>");
+                    sb.AppendLine($"                  <td valign=\"top\" style=\"font-size: 15px; line-height: 1.65; color: #395B64; text-align: justify; padding-right: {(!string.IsNullOrWhiteSpace(a.ImageUrl) ? "16px" : "0")};\">{System.Net.WebUtility.HtmlEncode(a.SummaryText)}</td>");
                     if (!string.IsNullOrWhiteSpace(a.ImageUrl))
                     {
-                        sb.AppendLine($"    <div style=\"margin: 10px 0;\"><img src=\"{a.ImageUrl}\" alt=\"{a.Title}\" style=\"max-width: 100%; border-radius: 8px; max-height: 300px; object-fit: cover;\" /></div>");
+                        sb.AppendLine($"                  <td valign=\"top\" width=\"160\" style=\"width: 160px; min-width: 140px;\"><img src=\"{System.Net.WebUtility.HtmlEncode(a.ImageUrl)}\" alt=\"{System.Net.WebUtility.HtmlEncode(a.Title)}\" style=\"width: 100%; height: 115px; object-fit: cover; border-radius: 16px; display: block; border: 1px solid rgba(0,0,0,0.06);\" /></td>");
                     }
+                    sb.AppendLine("                </tr>");
+                    sb.AppendLine("              </table>");
 
-                    sb.AppendLine($"    <p style=\"line-height: 1.6; color: #334155;\">{a.SummaryText}</p>");
-                    sb.AppendLine($"    <p><a href=\"{url}\" style=\"color: #0284c7; text-decoration: none; font-weight: bold;\">Czytaj pełne źródło &rarr;</a></p>");
-                    sb.AppendLine($"  </div>");
+                    // Card Footer: Source & Essence
+                    sb.AppendLine("              <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"border-top: 1px solid #f1f5f9; padding-top: 14px;\">");
+                    sb.AppendLine("                <tr>");
+                    sb.AppendLine("                  <td align=\"left\" valign=\"middle\">");
+                    sb.AppendLine("                    <table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">");
+                    sb.AppendLine("                      <tr>");
+                    sb.AppendLine($"                        <td style=\"padding-right: 8px;\"><a href=\"{System.Net.WebUtility.HtmlEncode(primaryUrl)}\" target=\"_blank\" style=\"text-decoration: none; display: inline-block;\"><img src=\"https://www.google.com/s2/favicons?domain={domainHost}&sz=64\" width=\"20\" height=\"20\" style=\"border-radius: 6px; display: block;\" alt=\"icon\" /></a></td>");
+                    sb.AppendLine($"                        <td style=\"font-size: 11px; color: #64748b;\">Źródło pierwotne &bull; <a href=\"{System.Net.WebUtility.HtmlEncode(primaryUrl)}\" target=\"_blank\" style=\"color: #0d9488; text-decoration: none; font-weight: 600;\">{domainHost}</a></td>");
+                    sb.AppendLine("                      </tr>");
+                    sb.AppendLine("                    </table>");
+                    sb.AppendLine("                  </td>");
+                    sb.AppendLine("                  <td align=\"right\" valign=\"middle\"><span style=\"font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.2em; color: #94a3b8; font-style: italic;\">AI SUMMARIZED ESSENCE</span></td>");
+                    sb.AppendLine("                </tr>");
+                    sb.AppendLine("              </table>");
+
+                    sb.AppendLine("            </td></tr>");
+                    sb.AppendLine("          </table>");
+                    sb.AppendLine("        </td></tr>");
                 }
 
-                sb.AppendLine($"  <div style=\"text-align: center; margin: 30px 0;\">");
-                sb.AppendLine($"    <a href=\"https://www.infoskrót.pl\" style=\"background: #0284c7; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;\">Odwiedź portal www.infoskrót.pl</a>");
-                sb.AppendLine($"  </div>");
+                // Global Footer
+                sb.AppendLine("        <tr><td align=\"center\" style=\"padding: 24px 12px 12px; font-size: 12px; color: #64748b; line-height: 1.6;\">");
+                sb.AppendLine("          <p style=\"margin: 0 0 8px 0; font-weight: 600; color: #395B64;\">InfoSkrót &bull; Skrót najważniejszych informacji bez klikania i clickbaitu.</p>");
+                sb.AppendLine("          <p style=\"margin: 0 0 12px 0;\">Otrzymujesz tę wiadomość, ponieważ subskrybujesz newsletter na portalu <a href=\"https://infoskrot.pl\" style=\"color: #0d9488; text-decoration: none; font-weight: 700;\">infoskrot.pl</a>.</p>");
+                sb.AppendLine("          <p style=\"margin: 0; font-size: 11px;\"><a href=\"{$unsubscribe}\" style=\"color: #64748b; text-decoration: underline;\">Wypisz się z newslettera</a></p>");
+                sb.AppendLine("        </td></tr>");
 
-                sb.AppendLine($"  <div style=\"background: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 20px;\">");
-                sb.AppendLine($"    <h4 style=\"margin-top: 0; color: #475569;\">Zestawienie źródeł:</h4>");
-                sb.AppendLine($"    <ol style=\"margin: 0; padding-left: 20px; color: #64748b;\">");
-                for (int i = 0; i < articles.Count; i++)
-                {
-                    var a = articles[i];
-                    var url = a.SourceUrls.FirstOrDefault() ?? "https://www.infoskrót.pl";
-                    sb.AppendLine($"      <li><a href=\"{url}\" style=\"color: #0284c7;\">{a.Title}</a></li>");
-                }
-                sb.AppendLine($"    </ol>");
-                sb.AppendLine($"  </div>");
-                sb.AppendLine($"  <p style=\"text-align: center; font-size: 13px; color: #94a3b8; margin-top: 25px;\">Wydanie przygotowane przez portal <a href=\"https://www.infoskrót.pl\" style=\"color: #0284c7; text-decoration: none; font-weight: bold;\">www.infoskrót.pl</a></p>");
-                sb.AppendLine($"  <p style=\"text-align: center; font-size: 11px; color: #94a3b8; margin-top: 15px;\"><a href=\"{{$unsubscribe}}\" style=\"color: #94a3b8; text-decoration: underline;\">Wypisz się z newslettera</a></p>");
-                sb.AppendLine($"</div>");
+                sb.AppendLine("      </table>");
+                sb.AppendLine("    </td></tr>");
+                sb.AppendLine("  </table>");
+                sb.AppendLine("</body></html>");
                 break;
 
             case SocialPlatformType.Facebook:
