@@ -48,6 +48,10 @@ services:
       - SocialPlatforms__Wykop__Token=${WYKOP_TOKEN}
       - SocialPlatforms__Hejto__ClientId=${HEJTO_CLIENT_ID}
       - SocialPlatforms__Hejto__ClientSecret=${HEJTO_CLIENT_SECRET}
+      - SocialPlatforms__MailerLite__ApiKey=${MAILERLITE_API_KEY}
+      - SocialPlatforms__MailerLite__FromEmail=${MAILERLITE_FROM_EMAIL:-kontakt@infoskrot.pl}
+      - SocialPlatforms__MailerLite__Enabled=${MAILERLITE_ENABLED:-true}
+      - SocialPlatforms__MailerLite__UseMock=${MAILERLITE_USE_MOCK:-false}
     depends_on:
       - db
     networks:
