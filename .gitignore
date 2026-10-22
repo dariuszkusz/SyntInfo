@@ -39,6 +39,7 @@ frontend/ios/App/build/
 
 # === Infrastructure / Docker ===
 Infrastructure/pgdata/
+logs/
 .env
 .env.*
 !.env.example

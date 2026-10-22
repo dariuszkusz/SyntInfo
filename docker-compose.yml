@@ -30,6 +30,8 @@ services:
       dockerfile: Dockerfile
     container_name: syntinfo_api
     restart: always
+    volumes:
+      - ./logs:/app/logs
     environment:
       - TZ=Europe/Warsaw
       - ASPNETCORE_ENVIRONMENT=Production
