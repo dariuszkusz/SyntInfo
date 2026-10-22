@@ -1,4 +1,4 @@
-describe.skip('Newsletter Subscription & Unsubscription (funkcjonalność tymczasowo ukryta na frontendzie)', () => {
+describe('Newsletter Subscription & Unsubscription', () => {
   beforeEach(() => {
     cy.clearLocalStorage();
     cy.intercept('GET', '/api/news/top', {

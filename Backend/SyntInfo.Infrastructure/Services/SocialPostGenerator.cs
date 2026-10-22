@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using SyntInfo.Application.Interfaces;
 using SyntInfo.Domain.Entities;
+using SyntInfo.Infrastructure.Services.Newsletter;
 
 namespace SyntInfo.Infrastructure.Services;
 
@@ -123,46 +124,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 break;
 
             case SocialPlatformType.Newsletter:
-                sb.AppendLine($"<div style=\"font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; color: #1e293b;\">");
-                sb.AppendLine($"  <h1 style=\"color: #0284c7; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;\"><a href=\"https://www.infoskrót.pl\" style=\"text-decoration: none; color: #0284c7;\">InfoSkrót</a> — Wydanie z {dateStr}</h1>");
-                sb.AppendLine($"  <p style=\"color: #64748b;\">Poniżej znajdziesz najważniejsze wiadomości wybrane przez redakcję InfoSkrót.</p>");
-                sb.AppendLine($"  <hr style=\"border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;\" />");
-
-                for (int i = 0; i < articles.Count; i++)
-                {
-                    var a = articles[i];
-                    var url = a.SourceUrls.FirstOrDefault() ?? "https://www.infoskrót.pl";
-                    sb.AppendLine($"  <div style=\"margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #f1f5f9;\">");
-                    sb.AppendLine($"    <h3 style=\"margin-top: 0; color: #0f172a;\">{i + 1}. {a.Title}</h3>");
-
-                    if (!string.IsNullOrWhiteSpace(a.ImageUrl))
-                    {
-                        sb.AppendLine($"    <div style=\"margin: 10px 0;\"><img src=\"{a.ImageUrl}\" alt=\"{a.Title}\" style=\"max-width: 100%; border-radius: 8px; max-height: 300px; object-fit: cover;\" /></div>");
-                    }
-
-                    sb.AppendLine($"    <p style=\"line-height: 1.6; color: #334155;\">{a.SummaryText}</p>");
-                    sb.AppendLine($"    <p><a href=\"{url}\" style=\"color: #0284c7; text-decoration: none; font-weight: bold;\">Czytaj pełne źródło &rarr;</a></p>");
-                    sb.AppendLine($"  </div>");
-                }
-
-                sb.AppendLine($"  <div style=\"text-align: center; margin: 30px 0;\">");
-                sb.AppendLine($"    <a href=\"https://www.infoskrót.pl\" style=\"background: #0284c7; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;\">Odwiedź portal www.infoskrót.pl</a>");
-                sb.AppendLine($"  </div>");
-
-                sb.AppendLine($"  <div style=\"background: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 20px;\">");
-                sb.AppendLine($"    <h4 style=\"margin-top: 0; color: #475569;\">Zestawienie źródeł:</h4>");
-                sb.AppendLine($"    <ol style=\"margin: 0; padding-left: 20px; color: #64748b;\">");
-                for (int i = 0; i < articles.Count; i++)
-                {
-                    var a = articles[i];
-                    var url = a.SourceUrls.FirstOrDefault() ?? "https://www.infoskrót.pl";
-                    sb.AppendLine($"      <li><a href=\"{url}\" style=\"color: #0284c7;\">{a.Title}</a></li>");
-                }
-                sb.AppendLine($"    </ol>");
-                sb.AppendLine($"  </div>");
-                sb.AppendLine($"  <p style=\"text-align: center; font-size: 13px; color: #94a3b8; margin-top: 25px;\">Wydanie przygotowane przez portal <a href=\"https://www.infoskrót.pl\" style=\"color: #0284c7; text-decoration: none; font-weight: bold;\">www.infoskrót.pl</a></p>");
-                sb.AppendLine($"  <p style=\"text-align: center; font-size: 11px; color: #94a3b8; margin-top: 15px;\"><a href=\"{{$unsubscribe}}\" style=\"color: #94a3b8; text-decoration: underline;\">Wypisz się z newslettera</a></p>");
-                sb.AppendLine($"</div>");
+                sb.Append(NewsletterHtmlRenderer.Render(articles.Select(a => NewsletterArticle.From(a)).ToList()));
                 break;
 
             case SocialPlatformType.Facebook:
