@@ -17,7 +17,7 @@ services:
     container_name: syntinfo_pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@syntinfo.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Brak wymaganego hasla dla PGAdmin}
     ports:
       - "5050:80"
     restart: always
