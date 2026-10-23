@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { NewsStore } from '../../state/news.store';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
 import { flagPl } from '@ng-icons/flag-icons';
-import { lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile } from '@ng-icons/lucide';
+import { lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles } from '@ng-icons/lucide';
 import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffee-button/buy-me-coffee-button.component';
 import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/newsletter-box.component';
 
@@ -11,7 +11,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
   selector: 'app-news-feed',
   standalone: true,
   imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent, NewsletterBoxComponent],
-  providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile })],
+  providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles })],
   template: `
     <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30 overflow-x-hidden">
       <!-- Header -->
@@ -128,6 +128,8 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
           <div class="grid gap-6">
             @for (article of store.filteredArticles(); track article.id) {
               <article 
+                itemscope
+                itemtype="https://schema.org/NewsArticle"
                 [ngClass]="article.region === 2 
                   ? 'bg-[#f4fbf7] border-[#d8f3e5] shadow-sm positive-article' 
                   : article.region === 1 
@@ -161,7 +163,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                         <ng-icon name="flagPl" class="text-xs"></ng-icon> Polska
                       </span>
                     }
-                    <time class="opacity-50 font-medium">{{ article.publishedAt | date:'short' }}</time>
+                    <time itemprop="datePublished" [attr.datetime]="article.publishedAt" class="opacity-50 font-medium">{{ article.publishedAt | date:'short' }}</time>
                   </div>
                 </div>
                 
@@ -169,10 +171,10 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                 <div class="flex flex-col-reverse md:flex-row gap-6 items-start mb-6">
                   <!-- Text Column: 2/3 width on md+ -->
                   <div class="article-content-col flex-1 w-full md:w-2/3 flex flex-col">
-                    <h2 class="article-title text-xl sm:text-2xl font-bold mb-4 leading-tight text-aux3">
+                    <h2 itemprop="headline" class="article-title text-xl sm:text-2xl font-bold mb-4 leading-tight text-aux3">
                       {{ article.title }}
                     </h2>
-                    <div class="article-summary text-[15px] leading-relaxed text-aux2 opacity-90 whitespace-pre-wrap tracking-wide text-justify hyphens-auto">{{ article.summaryText.trim() }}</div>
+                    <div itemprop="description" class="article-summary text-[15px] leading-relaxed text-aux2 opacity-90 whitespace-pre-wrap tracking-wide text-justify hyphens-auto">{{ article.summaryText.trim() }}</div>
                   </div>
 
                   <!-- Image Column: 1/3 width on md+ -->
@@ -180,6 +182,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                     <div class="article-image-col w-full md:w-1/3 shrink-0">
                       <div class="overflow-hidden rounded-2xl bg-aux1/20 border border-black/5 aspect-[4/3] w-full">
                         <img 
+                          itemprop="image"
                           [src]="article.imageUrl" 
                           [alt]="article.title"
                           loading="lazy"
@@ -190,26 +193,36 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                   }
                 </div>
 
-                <!-- Footer: Sources & Essence Tag -->
-                <div class="flex items-center justify-between pt-5 border-t border-aux1/30">
-                  <div class="flex items-center space-x-3">
+                <!-- Footer: Sources & AI Transparency -->
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-aux1/30">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-aux2/60">
+                      {{ article.sourceUrls.length > 1 ? 'Źródła:' : 'Źródło:' }}
+                    </span>
                     @for (url of article.sourceUrls; track url) {
-                      <a [href]="url" target="_blank" rel="noopener" class="group/icon relative">
-                        <div class="w-8 h-8 rounded-xl bg-aux1/30 flex items-center justify-center hover:bg-aux1 transition-colors">
-                          <img 
-                            [src]="'https://www.google.com/s2/favicons?domain=' + url + '&sz=64'" 
-                            class="w-4 h-4 grayscale group-hover/icon:grayscale-0 transition-all"
-                            alt="source">
-                        </div>
-                        <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-aux3 text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover/icon:opacity-100 transition-opacity whitespace-nowrap">
-                          Otwórz źródło
-                        </span>
+                      <a 
+                        [href]="url" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        itemprop="isBasedOn"
+                        [attr.aria-label]="'Otwórz artykuł źródłowy w serwisie ' + extractDomain(url)"
+                        class="source-link inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-aux1/40 hover:bg-aux1/80 border border-aux1/60 text-xs font-semibold text-aux3 transition-all hover:scale-[1.02]">
+                        <img 
+                          [src]="'https://www.google.com/s2/favicons?domain=' + url + '&sz=64'" 
+                          class="w-3.5 h-3.5 rounded-sm object-contain"
+                          alt=""
+                          loading="lazy">
+                        <span class="source-domain tracking-tight">{{ extractDomain(url) }}</span>
+                        <ng-icon name="lucideExternalLink" class="text-[10px] opacity-50"></ng-icon>
                       </a>
                     }
                   </div>
                   
-                  <div class="text-[9px] uppercase tracking-widest font-bold opacity-30 italic">
-                    AI Summarized Essence
+                  <div 
+                    class="ai-essence-badge flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-aux2/60 bg-aux1/20 px-2.5 py-1 rounded-full border border-aux1/40"
+                    title="Streszczenie wygenerowane automatycznie przez model AI na podstawie oficjalnych kanałów RSS.">
+                    <ng-icon name="lucideSparkles" class="text-xs text-primary"></ng-icon>
+                    <span>Streszczenie AI</span>
                   </div>
                 </div>
               </article>
@@ -243,10 +256,13 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
             <app-buy-me-coffee-button></app-buy-me-coffee-button>
           </div>
           <p class="text-xs font-bold text-aux3">
-            Info Skrót - Twój codzienny skrót informacji i wiadomości w pigułce.
+            InfoSkrót - Twój codzienny skrót informacji i wiadomości w pigułce.
           </p>
           <p class="text-[11px] text-aux2 opacity-70 leading-relaxed max-w-xl mx-auto">
             Bądź na bieżąco każdego dnia bez szumu informacyjnego. Nasz portal agreguje najważniejsze wydarzenia z kraju i ze świata, serwując je w postaci zwięzłej info pigułki. Szybka prasówka i esencja wiadomości dostosowana do Twojego tempa życia.
+          </p>
+          <p class="text-[10px] text-aux2/70 max-w-lg mx-auto">
+            Dbamy o transparentność: każde podsumowanie powstaje na bazie oficjalnych kanałów RSS i zawiera bezpośredni odsyłacz do pierwotnego artykułu u wydawcy.
           </p>
           <p class="text-[10px] text-aux2 opacity-40">
             &copy; 2026 InfoSkrót. Wszelkie prawa zastrzeżone.
@@ -277,6 +293,16 @@ export class NewsFeedComponent implements OnInit {
 
   ngOnInit() {
     this.store.loadTopNews();
+  }
+
+  extractDomain(url: string): string {
+    if (!url) return 'Źródło';
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname.replace(/^www\./i, '');
+    } catch {
+      return 'Źródło';
+    }
   }
 
   onImageError(event: Event) {
