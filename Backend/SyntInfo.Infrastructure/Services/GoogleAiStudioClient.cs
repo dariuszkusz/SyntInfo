@@ -26,8 +26,16 @@ namespace SyntInfo.Infrastructure.Services
 
         public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, Domain.Entities.SourceRegion region, CancellationToken cancellationToken = default)
         {
-            string regionCriteria = region == Domain.Entities.SourceRegion.Poland ? "o znaczeniu dla obywatela Polski" : "znaczeniem międzynarodowym";
-            var systemPrompt = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, {regionCriteria} i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy.";
+            string systemPrompt;
+            if (region == Domain.Entities.SourceRegion.Positive)
+            {
+                systemPrompt = $"Jesteś asystentem redakcyjnym odpowiedzialnym za sekcję POZYTYWNYCH WIADOMOŚCI. Twoim zadaniem jest wybranie dokładnie do {expectedCount} indeksów artykułów, które są WYŁĄCZNIE I JEDNOZNACZNIE POZYTYWNE, optymistyczne, budujące lub opisujące sukcesy, odkrycia naukowe, przełomy medyczne, ochronę przyrody czy pomoc ludziom. BEZWZGLĘDNIE ODRZUĆ wiadomości o stratach (np. straty w sadach, susza, powódź), problemach gospodarczych, wypadkach, wojnie, kryzysach czy sporach politycznych. Jeśli żaden artykuł nie jest jednoznacznie pozytywny, zwróć pustą listę []. Zwróć WYŁĄCZNIE czysty JSON: {{\"selectedIndexes\": [0, 1, ...]}}.";
+            }
+            else
+            {
+                string regionCriteria = region == Domain.Entities.SourceRegion.Poland ? "o znaczeniu dla obywatela Polski" : "znaczeniem międzynarodowym";
+                systemPrompt = $"Jesteś asystentem redakcyjnym. Otrzymujesz w formacie JSON (array) listę dostępnych najnowszych artykułów informacyjnych z ich indeksami, tytułami i opisami. Twoim zadaniem jest wskazanie dokładnie {expectedCount} indeksów NAJWAŻNIEJSZYCH tekstów z tej listy. Kieruj się skalą problemu, {regionCriteria} i siłą oddziaływania społecznego lub gospodarczego. Zwroc WYŁĄCZNIE czysty, poprawny obiekt JSON w formacie: {{\"selectedIndexes\": [0, 1, 3, ...]}}. Nie dodawaj innych tłumaczeń ani komentarzy.";
+            }
 
             try
             {

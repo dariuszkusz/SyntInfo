@@ -61,14 +61,14 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
           <!-- Filter Controls Bar -->
           <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
             <!-- Region Filter Tabs -->
-            <div class="inline-flex p-1 bg-white/80 backdrop-blur border border-aux1/80 rounded-2xl shadow-sm">
+            <div class="grid grid-cols-2 sm:inline-flex p-1 w-full sm:w-auto bg-white/80 backdrop-blur border border-aux1/80 rounded-2xl shadow-sm gap-1 sm:gap-0">
               <button 
                 (click)="store.setRegionFilter('all')"
                 [attr.aria-pressed]="store.selectedRegion() === 'all'"
                 [ngClass]="store.selectedRegion() === 'all' 
                   ? 'bg-aux3 text-white shadow-sm' 
                   : 'text-aux2 hover:bg-aux1/40'"
-                class="region-tab-all flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                class="region-tab-all flex items-center justify-start space-x-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
                 <ng-icon name="lucideLayers" class="text-sm"></ng-icon>
                 <span>Wszystkie</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.totalCount() }})</span>
@@ -79,7 +79,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                 [ngClass]="store.selectedRegion() === 'poland' 
                   ? 'bg-aux3 text-white shadow-sm' 
                   : 'text-aux2 hover:bg-aux1/40'"
-                class="region-tab-poland flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                class="region-tab-poland flex items-center justify-start space-x-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
                 <ng-icon name="flagPl" class="text-sm"></ng-icon>
                 <span>Polska</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.polandCount() }})</span>
@@ -90,7 +90,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                 [ngClass]="store.selectedRegion() === 'world' 
                   ? 'bg-aux3 text-white shadow-sm' 
                   : 'text-aux2 hover:bg-aux1/40'"
-                class="region-tab-world flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                class="region-tab-world flex items-center justify-start space-x-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
                 <ng-icon name="lucideGlobe" class="text-sm text-primary"></ng-icon>
                 <span>Świat</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.worldCount() }})</span>
@@ -101,7 +101,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                 [ngClass]="store.selectedRegion() === 'positive' 
                   ? 'bg-aux3 text-white shadow-sm' 
                   : 'text-aux2 hover:bg-aux1/40'"
-                class="region-tab-positive flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                class="region-tab-positive flex items-center justify-start space-x-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
                 <ng-icon name="lucideSmile" class="text-sm text-emerald-500"></ng-icon>
                 <span>Pozytywne</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.positiveCount() }})</span>
