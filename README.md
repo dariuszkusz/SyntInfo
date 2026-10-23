@@ -67,3 +67,14 @@ System został zbudowany w oparciu o zasady Clean Architecture, co gwarantuje ł
 - **Application**: Obsługa wzorca CQRS i reguł biznesowych.
 - **Infrastructure**: Dostęp do bazy danych, integracja z klientem AI oraz zadania w tle.
 - **API**: Kontrolery ASP.NET Core i konfiguracja globalna.
+
+## ⚠️ Zasady testowania na platformach zewnętrznych (Wykop, Hejto, Reddit, FB)
+
+> [!IMPORTANT]
+> Platformy społecznościowe (Hejto, Wykop, Reddit itp.) **nie posiadają odrębnego środowiska typu sandbox** – nawet aplikacje ze statusem deweloperskim publikują wpisy na żywej platformie.
+> 
+> **Zasada bezwzględna:** Wszystkie wpisy, requesty i posty wysyłane w ramach testów integracyjnych na żywe platformy **MUSZĄ** zawierać w tytule lub na początku treści wyraźne oznaczenie:  
+> **`[TEST - NIE KLIKAĆ]`** (lub w treści: `Test NIE KLIKAĆ`).
+> 
+> W przypadku testów lokalnych zaleca się weryfikację z włączonym trybem `UseMock: true` lub publikowanie do społeczności technicznych/testowych.
+

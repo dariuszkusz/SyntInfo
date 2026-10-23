@@ -21,10 +21,16 @@ public class RssFetcherJob : IJob
     {
         _logger.LogInformation("Wyzwalanie procesów tła (RSS + Cleanup) {Time}", DateTime.UtcNow);
         
+        context.CancellationToken.ThrowIfCancellationRequested();
         // 1. Pobieranie nowych newsów
         await _bus.PublishAsync(new TriggerRssFetchCommand());
 
+        context.CancellationToken.ThrowIfCancellationRequested();
         // 2. Usuwanie starych newsów (starszych niż 7 dni)
         await _bus.PublishAsync(new CleanupOldArticlesCommand(DaysToKeep: 7));
+
+        context.CancellationToken.ThrowIfCancellationRequested();
+        // 3. Generowanie szkiców postów na platformy społecznościowe (Telegram bot approval)
+        await _bus.PublishAsync(new CreateSocialPostDraftsCommand());
     }
 }

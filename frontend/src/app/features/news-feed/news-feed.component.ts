@@ -3,14 +3,15 @@ import { CommonModule } from '@angular/common';
 import { NewsStore } from '../../state/news.store';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
 import { flagPl } from '@ng-icons/flag-icons';
-import { lucideGlobe, lucideLayers, lucideX, lucideFilter } from '@ng-icons/lucide';
+import { lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile } from '@ng-icons/lucide';
 import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffee-button/buy-me-coffee-button.component';
+import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/newsletter-box.component';
 
 @Component({
   selector: 'app-news-feed',
   standalone: true,
-  imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent],
-  providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter })],
+  imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent, NewsletterBoxComponent],
+  providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile })],
   template: `
     <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
       <!-- Header -->
@@ -94,6 +95,17 @@ import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffe
                 <span>Świat</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.worldCount() }})</span>
               </button>
+              <button 
+                (click)="store.setRegionFilter('positive')"
+                [attr.aria-pressed]="store.selectedRegion() === 'positive'"
+                [ngClass]="store.selectedRegion() === 'positive' 
+                  ? 'bg-aux3 text-white shadow-sm' 
+                  : 'text-aux2 hover:bg-aux1/40'"
+                class="region-tab-positive flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                <ng-icon name="lucideSmile" class="text-sm text-emerald-500"></ng-icon>
+                <span>Pozytywne</span>
+                <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.positiveCount() }})</span>
+              </button>
             </div>
 
             <!-- Active Category Filter Badge -->
@@ -114,9 +126,11 @@ import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffe
           <div class="grid gap-6">
             @for (article of store.filteredArticles(); track article.id) {
               <article 
-                [ngClass]="article.region === 1 
-                  ? 'bg-[#faf7f0] border-[#ebe4d8] shadow-sm world-article' 
-                  : 'bg-white border-aux1/50 shadow-sm poland-article'"
+                [ngClass]="article.region === 2 
+                  ? 'bg-[#f4fbf7] border-[#d8f3e5] shadow-sm positive-article' 
+                  : article.region === 1 
+                    ? 'bg-[#faf7f0] border-[#ebe4d8] shadow-sm world-article' 
+                    : 'bg-white border-aux1/50 shadow-sm poland-article'"
                 class="article-card rounded-3xl p-6 sm:p-8 border transition-all hover:shadow-md">
                 
                 <!-- Card Top Meta -->
@@ -132,7 +146,11 @@ import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffe
                   </button>
 
                   <div class="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-wider text-aux2/60">
-                    @if (article.region === 1) {
+                    @if (article.region === 2) {
+                      <span class="region-badge-positive inline-flex items-center gap-1 text-emerald-800/90 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                        <ng-icon name="lucideSmile" class="text-xs text-emerald-600"></ng-icon> Pozytywne
+                      </span>
+                    } @else if (article.region === 1) {
                       <span class="region-badge-world inline-flex items-center gap-1 text-amber-900/80 bg-amber-100/70 px-2 py-0.5 rounded-md">
                         <ng-icon name="lucideGlobe" class="text-xs text-primary"></ng-icon> Świat
                       </span>
@@ -207,6 +225,13 @@ import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffe
             }
           </div>
         }
+
+        <!-- Newsletter Subscription Box (ukryty do czasu wdrożenia) -->
+        @if (showNewsletter) {
+          <div class="mt-12">
+            <app-newsletter-box></app-newsletter-box>
+          </div>
+        }
       </main>
 
       <!-- Footer -->
@@ -245,6 +270,8 @@ import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffe
 export class NewsFeedComponent implements OnInit {
   readonly store = inject(NewsStore);
   readonly isDevMode = isDevMode();
+  // Newsletter MailerLite integration is active and verified
+  readonly showNewsletter = true;
 
   ngOnInit() {
     this.store.loadTopNews();

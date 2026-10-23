@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,53 +39,60 @@ namespace SyntInfo.Infrastructure.Persistence
         {
             var polandSourcesConfig = configuration.GetSection("RssSources:Poland").Get<List<RssSourceConfig>>() ?? new();
             var worldSourcesConfig = configuration.GetSection("RssSources:World").Get<List<RssSourceConfig>>() ?? new();
+            var positiveSourcesConfig = configuration.GetSection("RssSources:Positive").Get<List<RssSourceConfig>>() ?? new();
 
             bool hasChanges = false;
             var allConfigUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var config in polandSourcesConfig)
+            var regionConfigs = new (List<RssSourceConfig> Configs, SourceRegion Region)[]
             {
-                allConfigUrls.Add(config.Url);
-                var existing = await dbContext.NewsSources.FirstOrDefaultAsync(s => s.RssUrl == config.Url);
-                if (existing == null)
-                {
-                    dbContext.NewsSources.Add(new NewsSource
-                    {
-                        Name = config.Name,
-                        RssUrl = config.Url,
-                        Region = SourceRegion.Poland,
-                        IsActive = true
-                    });
-                    hasChanges = true;
-                }
-                else if (!existing.IsActive)
-                {
-                    existing.IsActive = true;
-                    dbContext.NewsSources.Update(existing);
-                    hasChanges = true;
-                }
-            }
+                (polandSourcesConfig, SourceRegion.Poland),
+                (worldSourcesConfig, SourceRegion.World),
+                (positiveSourcesConfig, SourceRegion.Positive)
+            };
 
-            foreach (var config in worldSourcesConfig)
+            foreach (var (configs, region) in regionConfigs)
             {
-                allConfigUrls.Add(config.Url);
-                var existing = await dbContext.NewsSources.FirstOrDefaultAsync(s => s.RssUrl == config.Url);
-                if (existing == null)
+                foreach (var config in configs)
                 {
-                    dbContext.NewsSources.Add(new NewsSource
+                    allConfigUrls.Add(config.Url);
+                    var existing = await dbContext.NewsSources.FirstOrDefaultAsync(s => s.RssUrl == config.Url);
+                    if (existing == null)
                     {
-                        Name = config.Name,
-                        RssUrl = config.Url,
-                        Region = SourceRegion.World,
-                        IsActive = true
-                    });
-                    hasChanges = true;
-                }
-                else if (!existing.IsActive)
-                {
-                    existing.IsActive = true;
-                    dbContext.NewsSources.Update(existing);
-                    hasChanges = true;
+                        dbContext.NewsSources.Add(new NewsSource
+                        {
+                            Name = config.Name,
+                            RssUrl = config.Url,
+                            Region = region,
+                            IsActive = true
+                        });
+                        hasChanges = true;
+                    }
+                    else
+                    {
+                        bool needsUpdate = false;
+                        if (!existing.IsActive)
+                        {
+                            existing.IsActive = true;
+                            needsUpdate = true;
+                        }
+                        if (existing.Region != region)
+                        {
+                            existing.Region = region;
+                            needsUpdate = true;
+                        }
+                        if (existing.Name != config.Name)
+                        {
+                            existing.Name = config.Name;
+                            needsUpdate = true;
+                        }
+
+                        if (needsUpdate)
+                        {
+                            dbContext.NewsSources.Update(existing);
+                            hasChanges = true;
+                        }
+                    }
                 }
             }
 

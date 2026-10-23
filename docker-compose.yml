@@ -4,7 +4,7 @@ services:
     container_name: syntinfo_db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-synt_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synt_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-syntinfo_db}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -17,7 +17,7 @@ services:
     container_name: syntinfo_pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@syntinfo.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin_password}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
       - "5050:80"
     restart: always
@@ -30,13 +30,30 @@ services:
       dockerfile: Dockerfile
     container_name: syntinfo_api
     restart: always
+    volumes:
+      - ./logs:/app/logs
     environment:
+      - TZ=Europe/Warsaw
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${POSTGRES_DB:-syntinfo_db};Username=${POSTGRES_USER:-synt_user};Password=${POSTGRES_PASSWORD:-synt_password}
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${POSTGRES_DB:-syntinfo_db};Username=${POSTGRES_USER:-synt_user};Password=${POSTGRES_PASSWORD}
       - OpenRouter__ApiKey=${OPENROUTER_API_KEY}
       - Search__TavilyApiKey=${TAVILY_API_KEY}
-      - GoogleAiStudio__ApiKey=${PLACEHOLDER_GOOGLE_KEY}
+      - GoogleAiStudio__ApiKey=${GOOGLE_AI_KEY}
       - Serilog__WriteTo__1__Args__path=${SERILOG_PATH:-/app/logs/log-.txt}
+      - FrontendUrl=${FRONTEND_URL:-https://infoskrot.pl}
+      - Admin__ApiKey=${ADMIN_API_KEY}
+      - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
+      - Telegram__AdminChatId=${TELEGRAM_ADMIN_CHAT_ID}
+      - Telegram__SecretToken=${TELEGRAM_SECRET_TOKEN}
+      - SocialPlatforms__Wykop__Key=${WYKOP_KEY}
+      - SocialPlatforms__Wykop__Secret=${WYKOP_SECRET}
+      - SocialPlatforms__Wykop__Token=${WYKOP_TOKEN}
+      - SocialPlatforms__Hejto__ClientId=${HEJTO_CLIENT_ID}
+      - SocialPlatforms__Hejto__ClientSecret=${HEJTO_CLIENT_SECRET}
+      - SocialPlatforms__MailerLite__ApiKey=${MAILERLITE_API_KEY}
+      - SocialPlatforms__MailerLite__FromEmail=${MAILERLITE_FROM_EMAIL:-kontakt@infoskrot.pl}
+      - SocialPlatforms__MailerLite__Enabled=${MAILERLITE_ENABLED:-true}
+      - SocialPlatforms__MailerLite__UseMock=${MAILERLITE_USE_MOCK:-false}
     depends_on:
       - db
     networks:

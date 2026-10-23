@@ -4,12 +4,13 @@ import { inject, computed } from '@angular/core';
 import { pipe, switchMap, tap } from 'rxjs';
 import { NewsArticle, NewsService, TopNewsResponse } from '../features/news.service';
 
-export type RegionFilter = 'all' | 'poland' | 'world';
+export type RegionFilter = 'all' | 'poland' | 'world' | 'positive';
 
 export interface NewsState {
   articles: NewsArticle[];
   polandArticles: NewsArticle[];
   worldArticles: NewsArticle[];
+  positiveArticles: NewsArticle[];
   selectedRegion: RegionFilter;
   selectedCategory: string | null;
   isLoading: boolean;
@@ -21,7 +22,7 @@ const REGION_STORAGE_KEY = 'syntinfo_region_filter';
 function getStoredRegion(): RegionFilter {
   try {
     const val = localStorage.getItem(REGION_STORAGE_KEY);
-    if (val === 'all' || val === 'poland' || val === 'world') {
+    if (val === 'all' || val === 'poland' || val === 'world' || val === 'positive') {
       return val;
     }
   } catch {
@@ -34,6 +35,7 @@ const initialState: NewsState = {
   articles: [],
   polandArticles: [],
   worldArticles: [],
+  positiveArticles: [],
   selectedRegion: getStoredRegion(),
   selectedCategory: null,
   isLoading: false,
@@ -45,7 +47,7 @@ export const NewsStore = signalStore(
   withState(initialState),
   withComputed((store) => {
     const allSortedArticles = computed(() => {
-      const combined = [...store.polandArticles(), ...store.worldArticles()];
+      const combined = [...store.polandArticles(), ...store.worldArticles(), ...store.positiveArticles()];
       const uniqueMap = new Map<string, NewsArticle>();
       for (const item of combined) {
         if (!uniqueMap.has(item.id)) {
@@ -66,6 +68,8 @@ export const NewsStore = signalStore(
         baseList = store.polandArticles();
       } else if (region === 'world') {
         baseList = store.worldArticles();
+      } else if (region === 'positive') {
+        baseList = store.positiveArticles();
       } else {
         baseList = allSortedArticles();
       }
@@ -81,6 +85,7 @@ export const NewsStore = signalStore(
 
     const polandCount = computed(() => store.polandArticles().length);
     const worldCount = computed(() => store.worldArticles().length);
+    const positiveCount = computed(() => store.positiveArticles().length);
     const totalCount = computed(() => allSortedArticles().length);
 
     const availableCategories = computed(() => {
@@ -101,6 +106,7 @@ export const NewsStore = signalStore(
       filteredArticles,
       polandCount,
       worldCount,
+      positiveCount,
       totalCount,
       availableCategories,
     };
@@ -145,8 +151,9 @@ export const NewsStore = signalStore(
           newsService.getTopNews().pipe(
             tap({
               next: (response: TopNewsResponse) => patchState(store, { 
-                polandArticles: response.poland, 
-                worldArticles: response.world, 
+                polandArticles: response.poland ?? [], 
+                worldArticles: response.world ?? [], 
+                positiveArticles: response.positive ?? [],
                 isLoading: false 
               }),
               error: (err: any) => patchState(store, { error: err.message, isLoading: false })
@@ -179,6 +186,7 @@ export const NewsStore = signalStore(
                 patchState(store, { 
                   polandArticles: [], 
                   worldArticles: [],
+                  positiveArticles: [],
                   articles: [] 
                 });
               },
