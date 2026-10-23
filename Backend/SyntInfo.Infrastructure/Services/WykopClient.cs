@@ -63,7 +63,18 @@ public class WykopClient : IWykopClient
         throw new InvalidOperationException("Odpowiedź z endpointu /connect nie zawierała pola data.connect_url.");
     }
 
-    private static readonly string TokenFilePath = Path.Combine(AppContext.BaseDirectory, "wykop_tokens.json");
+    private static string TokenFilePath
+    {
+        get
+        {
+            var logsDir = Path.Combine(AppContext.BaseDirectory, "logs");
+            if (Directory.Exists(logsDir))
+            {
+                return Path.Combine(logsDir, "wykop_tokens.json");
+            }
+            return Path.Combine(AppContext.BaseDirectory, "wykop_tokens.json");
+        }
+    }
 
     public async Task SaveUserTokensAsync(string userToken, string? refreshToken, CancellationToken cancellationToken = default)
     {
@@ -255,7 +266,11 @@ public class WykopClient : IWykopClient
         }
 
         // 1b. Sprawdź trwały plik wykop_tokens.json
-        if (File.Exists(TokenFilePath))
+        var tokenPath = File.Exists(TokenFilePath)
+            ? TokenFilePath
+            : Path.Combine(AppContext.BaseDirectory, "wykop_tokens.json");
+
+        if (File.Exists(tokenPath))
         {
             try
             {
