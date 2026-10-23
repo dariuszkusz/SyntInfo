@@ -13,10 +13,10 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
   imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent, NewsletterBoxComponent],
   providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile })],
   template: `
-    <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
+    <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30 overflow-x-hidden">
       <!-- Header -->
       <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-primary/20 p-4">
-        <div class="max-w-4xl mx-auto flex justify-between items-center">
+        <div class="max-w-4xl mx-auto flex flex-wrap justify-between items-center gap-3">
           <div class="flex items-center space-x-3">
             <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
             <div class="flex flex-col">
@@ -28,19 +28,21 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
               </span>
             </div>
           </div>
-          <div class="flex items-center space-x-4">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-4">
             <app-buy-me-coffee-button></app-buy-me-coffee-button>
             @if (isDevMode) {
-              <button 
-                (click)="store.syncNews()"
-                class="text-[10px] px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all font-bold uppercase tracking-wider">
-                Sync On Demand
-              </button>
-              <button 
-                (click)="store.clearNews()"
-                class="text-[10px] px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-all font-bold uppercase tracking-wider">
-                Wyczyść bazę
-              </button>
+              <div class="hidden sm:flex items-center space-x-2">
+                <button 
+                  (click)="store.syncNews()"
+                  class="text-[10px] px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all font-bold uppercase tracking-wider">
+                  Sync On Demand
+                </button>
+                <button 
+                  (click)="store.clearNews()"
+                  class="text-[10px] px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-all font-bold uppercase tracking-wider">
+                  Wyczyść bazę
+                </button>
+              </div>
             }
           </div>
         </div>

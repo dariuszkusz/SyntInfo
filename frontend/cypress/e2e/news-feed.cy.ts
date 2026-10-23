@@ -197,7 +197,14 @@ describe('News Feed', () => {
           .and('have.class', 'justify-start');
       });
 
-      // Sprawdzenie, że żaden przycisk nie wystaje poza szerokość okna (brak horizontal scrolla)
+      // Sprawdzenie, że kontener zakładek mieści się w szerokości ekranu i nie powoduje overflow
+      cy.get('.region-tab-all')
+        .parent()
+        .then(($container) => {
+          expect($container[0].scrollWidth).to.be.lte($container[0].clientWidth + 1);
+        });
+
+      // Sprawdzenie, że cała strona nie posiada poziomego scrolla na mobile
       cy.window().then((win) => {
         expect(win.document.documentElement.scrollWidth).to.be.lte(win.innerWidth + 1);
       });
