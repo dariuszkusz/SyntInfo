@@ -38,13 +38,49 @@ jobs:
             cd /opt/syntinfo
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
-            # Create .env file from secrets if it doesn't exist
-            echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" > .env
-            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-            echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
-            echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> .env
-            echo "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}" >> .env
-            echo "PLACEHOLDER_GOOGLE_KEY=${{ secrets.PLACEHOLDER_GOOGLE_KEY }}" >> .env
+            # Create .env file from secrets only if it doesn't already exist
+            if [ ! -f .env ]; then
+              # PostgreSQL
+              echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" > .env
+              echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+              echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
+
+              # pgAdmin
+              echo "PGADMIN_DEFAULT_EMAIL=${{ secrets.PGADMIN_DEFAULT_EMAIL }}" >> .env
+              echo "PGADMIN_DEFAULT_PASSWORD=${{ secrets.PGADMIN_DEFAULT_PASSWORD }}" >> .env
+
+              # Frontend & Security
+              echo "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" >> .env
+              echo "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" >> .env
+
+              # LLM & Search
+              echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> .env
+              echo "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}" >> .env
+              echo "GOOGLE_AI_KEY=${{ secrets.GOOGLE_AI_KEY || secrets.PLACEHOLDER_GOOGLE_KEY }}" >> .env
+
+              # Telegram Bot
+              echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
+              echo "TELEGRAM_ADMIN_CHAT_ID=${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}" >> .env
+              echo "TELEGRAM_SECRET_TOKEN=${{ secrets.TELEGRAM_SECRET_TOKEN }}" >> .env
+
+              # Social Media (Wykop & Hejto)
+              echo "WYKOP_KEY=${{ secrets.WYKOP_KEY }}" >> .env
+              echo "WYKOP_SECRET=${{ secrets.WYKOP_SECRET }}" >> .env
+              echo "WYKOP_TOKEN=${{ secrets.WYKOP_TOKEN }}" >> .env
+              echo "HEJTO_CLIENT_ID=${{ secrets.HEJTO_CLIENT_ID }}" >> .env
+              echo "HEJTO_CLIENT_SECRET=${{ secrets.HEJTO_CLIENT_SECRET }}" >> .env
+
+              # Newsletter (MailerLite)
+              echo "MAILERLITE_API_KEY=${{ secrets.MAILERLITE_API_KEY }}" >> .env
+              echo "MAILERLITE_FROM_EMAIL=${{ secrets.MAILERLITE_FROM_EMAIL }}" >> .env
+              echo "MAILERLITE_ENABLED=${{ secrets.MAILERLITE_ENABLED }}" >> .env
+              echo "MAILERLITE_USE_MOCK=${{ secrets.MAILERLITE_USE_MOCK }}" >> .env
+
+              # Logging
+              echo "SERILOG_PATH=${{ secrets.SERILOG_PATH }}" >> .env
+            else
+              echo ".env file already exists on server, preserving existing configuration."
+            fi
 
             # Restart containers and rebuild images
             docker compose down

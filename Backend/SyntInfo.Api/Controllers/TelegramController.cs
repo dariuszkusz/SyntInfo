@@ -133,13 +133,17 @@ public class TelegramController : ControllerBase
 
 
     /// <summary>
-    /// Ręczne wyzwolenie generowania szkiców postów dla administratora (do celów testowych/operacyjnych).
+    /// Ręczne wyzwolenie wysyłki partii artykułów do selekcji i publikacji na platformy społecznościowe.
+    /// Deleguje logikę do handlera CQRS (SendCurationBatchCommandHandler).
     /// </summary>
     [HttpPost("trigger-drafts")]
-    public async Task<IActionResult> TriggerDrafts([FromQuery] Guid? articleId = null, [FromQuery] int? limit = null)
+    public async Task<IActionResult> TriggerDrafts([FromQuery] int count = 5, CancellationToken cancellationToken = default)
     {
-        await _bus.PublishAsync(new CreateSocialPostDraftsCommand(articleId, limit));
-        return Accepted(new { Message = "Rozpoczęto generowanie szkiców postów na platformy społecznościowe." });
+        var result = await _bus.InvokeAsync<SendCurationBatchResult>(
+            new SendCurationBatchCommand(count),
+            cancellationToken);
+
+        return Ok(result);
     }
 
     public record SetupWebhookDto(string? WebhookUrl);

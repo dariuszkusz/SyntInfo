@@ -146,6 +146,15 @@ builder.Services.AddQuartz(q =>
         .ForJob(jobKey)
         .WithIdentity("RssFetcherJob-trigger")
         .WithCronSchedule("0 0 7,19 * * ?", x => x.InTimeZone(warsawTimeZone)));
+
+    // Odpalanie publikacji/selekcji na platformy społecznościowe raz dziennie o 8:00 (czasu polskiego)
+    var socialJobKey = new JobKey("SocialCurationJob");
+    q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.SocialCurationJob>(opts => opts.WithIdentity(socialJobKey));
+
+    q.AddTrigger(opts => opts
+        .ForJob(socialJobKey)
+        .WithIdentity("SocialCurationJob-trigger")
+        .WithCronSchedule("0 0 8 * * ?", x => x.InTimeZone(warsawTimeZone)));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
