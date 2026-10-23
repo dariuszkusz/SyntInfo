@@ -13,10 +13,10 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
   imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent, NewsletterBoxComponent],
   providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile })],
   template: `
-    <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30">
+    <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30 overflow-x-hidden">
       <!-- Header -->
       <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-primary/20 p-4">
-        <div class="max-w-4xl mx-auto flex justify-between items-center">
+        <div class="max-w-4xl mx-auto flex flex-wrap justify-between items-center gap-3">
           <div class="flex items-center space-x-3">
             <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
             <div class="flex flex-col">
@@ -28,19 +28,21 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
               </span>
             </div>
           </div>
-          <div class="flex items-center space-x-4">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-4">
             <app-buy-me-coffee-button></app-buy-me-coffee-button>
             @if (isDevMode) {
-              <button 
-                (click)="store.syncNews()"
-                class="text-[10px] px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all font-bold uppercase tracking-wider">
-                Sync On Demand
-              </button>
-              <button 
-                (click)="store.clearNews()"
-                class="text-[10px] px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-all font-bold uppercase tracking-wider">
-                Wyczyść bazę
-              </button>
+              <div class="hidden sm:flex items-center space-x-2">
+                <button 
+                  (click)="store.syncNews()"
+                  class="text-[10px] px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all font-bold uppercase tracking-wider">
+                  Sync On Demand
+                </button>
+                <button 
+                  (click)="store.clearNews()"
+                  class="text-[10px] px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-all font-bold uppercase tracking-wider">
+                  Wyczyść bazę
+                </button>
+              </div>
             }
           </div>
         </div>
@@ -61,14 +63,14 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
           <!-- Filter Controls Bar -->
           <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
             <!-- Region Filter Tabs -->
-            <div class="inline-flex p-1 bg-white/80 backdrop-blur border border-aux1/80 rounded-2xl shadow-sm">
+            <div class="grid grid-cols-2 sm:inline-flex p-1 w-full sm:w-auto bg-white/80 backdrop-blur border border-aux1/80 rounded-2xl shadow-sm gap-1 sm:gap-0">
               <button 
                 (click)="store.setRegionFilter('all')"
                 [attr.aria-pressed]="store.selectedRegion() === 'all'"
                 [ngClass]="store.selectedRegion() === 'all' 
                   ? 'bg-aux3 text-white shadow-sm' 
                   : 'text-aux2 hover:bg-aux1/40'"
-                class="region-tab-all flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                class="region-tab-all flex items-center justify-start space-x-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
                 <ng-icon name="lucideLayers" class="text-sm"></ng-icon>
                 <span>Wszystkie</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.totalCount() }})</span>
@@ -79,7 +81,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                 [ngClass]="store.selectedRegion() === 'poland' 
                   ? 'bg-aux3 text-white shadow-sm' 
                   : 'text-aux2 hover:bg-aux1/40'"
-                class="region-tab-poland flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                class="region-tab-poland flex items-center justify-start space-x-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
                 <ng-icon name="flagPl" class="text-sm"></ng-icon>
                 <span>Polska</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.polandCount() }})</span>
@@ -90,7 +92,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                 [ngClass]="store.selectedRegion() === 'world' 
                   ? 'bg-aux3 text-white shadow-sm' 
                   : 'text-aux2 hover:bg-aux1/40'"
-                class="region-tab-world flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                class="region-tab-world flex items-center justify-start space-x-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
                 <ng-icon name="lucideGlobe" class="text-sm text-primary"></ng-icon>
                 <span>Świat</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.worldCount() }})</span>
@@ -101,7 +103,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                 [ngClass]="store.selectedRegion() === 'positive' 
                   ? 'bg-aux3 text-white shadow-sm' 
                   : 'text-aux2 hover:bg-aux1/40'"
-                class="region-tab-positive flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
+                class="region-tab-positive flex items-center justify-start space-x-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all">
                 <ng-icon name="lucideSmile" class="text-sm text-emerald-500"></ng-icon>
                 <span>Pozytywne</span>
                 <span class="ml-1 text-[10px] opacity-75 font-semibold">({{ store.positiveCount() }})</span>

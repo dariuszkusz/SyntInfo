@@ -168,4 +168,74 @@ describe('News Feed', () => {
     cy.get('.positive-article').should('have.class', 'bg-[#f4fbf7]');
     cy.get('.region-badge-positive').should('contain', 'Pozytywne');
   });
+
+  describe('Mobile Viewport & Positive News', () => {
+    beforeEach(() => {
+      // Symulacja smartfona (iPhone X: 375x812)
+      cy.viewport(375, 812);
+    });
+
+    it('should display filter tabs in a 2x2 grid on mobile screens with left alignment', () => {
+      // Kontener powinien mieć klasy siatki 2x2 na mobile
+      cy.get('.region-tab-all')
+        .parent()
+        .should('have.class', 'grid')
+        .and('have.class', 'grid-cols-2')
+        .and('have.class', 'w-full');
+
+      // Wszystkie 4 przyciski powinny być widoczne i mieć wyrównanie do lewej (justify-start)
+      const tabs = [
+        '.region-tab-all',
+        '.region-tab-poland',
+        '.region-tab-world',
+        '.region-tab-positive'
+      ];
+
+      tabs.forEach((selector) => {
+        cy.get(selector)
+          .should('be.visible')
+          .and('have.class', 'justify-start');
+      });
+
+      // Sprawdzenie, że kontener zakładek mieści się w szerokości ekranu i nie powoduje overflow
+      cy.get('.region-tab-all')
+        .parent()
+        .then(($container) => {
+          expect($container[0].scrollWidth).to.be.lte($container[0].clientWidth + 1);
+        });
+
+      // Sprawdzenie, że cała strona nie posiada poziomego scrolla na mobile
+      cy.window().then((win) => {
+        expect(win.document.documentElement.scrollWidth).to.be.lte(win.innerWidth + 1);
+      });
+    });
+
+    it('should filter only positive news when tapped on mobile', () => {
+      // Kliknięcie w zakładkę "Pozytywne" w widoku mobilnym
+      cy.get('.region-tab-positive').click();
+
+      // Weryfikacja stanu aktywnego przycisku
+      cy.get('.region-tab-positive')
+        .should('have.attr', 'aria-pressed', 'true')
+        .and('have.class', 'bg-aux3')
+        .and('have.class', 'text-white');
+
+      // Powinna być widoczna tylko pozytywna wiadomość
+      cy.contains('Pozytywna wiadomość ze świata').should('be.visible');
+      cy.contains('Wiadomość z Polski').should('not.exist');
+      cy.contains('News from the World').should('not.exist');
+
+      // Weryfikacja zapisania filtru w localStorage
+      cy.getAllLocalStorage().then((storage) => {
+        const originStorage = storage[window.location.origin];
+        expect(originStorage['syntinfo_region_filter']).to.equal('positive');
+      });
+
+      // Powrót do "Wszystkie" na mobile
+      cy.get('.region-tab-all').click();
+      cy.contains('Wiadomość z Polski').should('be.visible');
+      cy.contains('News from the World').should('be.visible');
+      cy.contains('Pozytywna wiadomość ze świata').should('be.visible');
+    });
+  });
 });

@@ -303,12 +303,20 @@ namespace SyntInfo.Application.CQRS.Handlers
                 }
 
                 var jsonStr = JsonSerializer.Serialize(selectionList);
-                var prompt = $"Analizujesz newsy dla regionu {region}. Z poniższej listy JSON wybierz DOKŁADNIE {maxPerRegion} najważniejszych newsów. Zwróć tylko tablicę numerów index, np. [1, 5, 12].\n\n{jsonStr}";
+                var prompt = region == SourceRegion.Positive
+                    ? $"Analizujesz kandydatów do sekcji POZYTYWNYCH WIADOMOŚCI. Z poniższej listy JSON wybierz DOKŁADNIE do {maxPerRegion} artykułów, które są jednoznacznie i bezsprzecznie pozytywne, budujące i inspirujące (odrzucaj wszelkie straty, tragedie, problemy rolnicze/gospodarcze i kryzysy). Zwróć tylko tablicę numerów index, np. [1, 5]. Jeśli żaden nie pasuje, zwróć [].\n\n{jsonStr}"
+                    : $"Analizujesz newsy dla regionu {region}. Z poniższej listy JSON wybierz DOKŁADNIE {maxPerRegion} najważniejszych newsów. Zwróć tylko tablicę numerów index, np. [1, 5, 12].\n\n{jsonStr}";
 
                 var selectedIndexes = await _googleAiStudioClient.SelectTopArticlesIndexesAsync(prompt, maxPerRegion, region, cancellationToken);
 
                 if (selectedIndexes == null || !selectedIndexes.Any())
                 {
+                    if (region == SourceRegion.Positive)
+                    {
+                        _logger.LogInformation("Brak kandydatów spełniających rygorystyczne kryteria pozytywnych wiadomości.");
+                        return commandsToExecute;
+                    }
+
                     commandsToExecute.AddRange(limitedNewCandidates.Take(maxPerRegion));
                     return commandsToExecute;
                 }
