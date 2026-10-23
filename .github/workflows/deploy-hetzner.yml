@@ -38,13 +38,17 @@ jobs:
             cd /opt/syntinfo
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
-            # Create .env file from secrets if it doesn't exist
-            echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" > .env
-            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-            echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
-            echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> .env
-            echo "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}" >> .env
-            echo "PLACEHOLDER_GOOGLE_KEY=${{ secrets.PLACEHOLDER_GOOGLE_KEY }}" >> .env
+            # Create .env file from secrets only if it doesn't already exist
+            if [ ! -f .env ]; then
+              echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" > .env
+              echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+              echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
+              echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> .env
+              echo "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}" >> .env
+              echo "PLACEHOLDER_GOOGLE_KEY=${{ secrets.PLACEHOLDER_GOOGLE_KEY }}" >> .env
+            else
+              echo ".env file already exists on server, preserving existing configuration."
+            fi
 
             # Restart containers and rebuild images
             docker compose down
