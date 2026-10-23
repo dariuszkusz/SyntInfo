@@ -7,41 +7,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     
     <!-- SEO Meta Tags -->
-    <meta name="description" content="Info Skrót to Twoja codzienna info pigułka i zwięzły skrót informacji z kraju i ze świata. Najważniejsze wiadomości i szybka prasówka każdego dnia." />
-    <meta name="keywords" content="info skrót, info pigułka, skrót informacji, wiadomości w pigułce, prasówka, skrót wiadomości, najważniejsze informacje, aktualności" />
+    <meta name="description" content="InfoSkrót to codzienna info pigułka i zwięzły skrót wiadomości z Polski, ze Świata oraz selekcja Pozytywnych Wiadomości. Szybka prasówka w 2–3 minuty z odnośnikami do źródeł." />
+    <meta name="keywords" content="info skrót, infoskrot, info pigułka, skrót informacji, pozytywne wiadomości, dobre wiadomości, wiadomości w pigułce, szybka prasówka, aktualności polska świat" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://infoskrot.pl/" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://infoskrot.pl/" />
-    <meta property="og:title" content="Info Skrót - Najważniejsze wiadomości w pigułce | Skrót informacji" />
-    <meta property="og:description" content="Zwięzły skrót informacji z kraju i ze świata. Codzienna info pigułka i szybka prasówka dla każdego." />
+    <meta property="og:title" content="InfoSkrót - Najważniejsze wiadomości w pigułce | Polska, Świat, Pozytywne" />
+    <meta property="og:description" content="Codzienna info pigułka i zwięzły skrót wiadomości w 2–3 minuty. Polska, Świat i Pozytywne wiadomości z bezpośrednimi odsyłaczami do źródeł." />
     <meta property="og:image" content="https://infoskrot.pl/assets/android-chrome-512x512.png" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary" />
     <meta property="twitter:url" content="https://infoskrot.pl/" />
-    <meta property="twitter:title" content="Info Skrót - Najważniejsze wiadomości w pigułce | Skrót informacji" />
-    <meta property="twitter:description" content="Zwięzły skrót informacji z kraju i ze świata. Codzienna info pigułka i szybka prasówka dla każdego." />
+    <meta property="twitter:title" content="InfoSkrót - Najważniejsze wiadomości w pigułce | Polska, Świat, Pozytywne" />
+    <meta property="twitter:description" content="Codzienna info pigułka i zwięzły skrót wiadomości w 2–3 minuty. Polska, Świat i Pozytywne wiadomości z bezpośrednimi odsyłaczami do źródeł." />
     <meta property="twitter:image" content="https://infoskrot.pl/assets/android-chrome-512x512.png" />
 
-    <!-- Ustrukturyzowane dane JSON-LD (WebSite) -->
+    <!-- Ustrukturyzowane dane JSON-LD (WebSite & Organization) -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "Info Skrót",
-      "alternateName": [
-        "infoskrot",
-        "infoskrot.pl",
-        "info skrót",
-        "info pigułka",
-        "skrót informacji",
-        "prasówka"
-      ],
-      "url": "https://infoskrot.pl/",
-      "description": "Najważniejsze informacje i wiadomości w zwięzłym skrócie. Codzienna info pigułka i prasówka z kraju i ze świata."
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://infoskrot.pl/#website",
+          "name": "InfoSkrót",
+          "alternateName": [
+            "Info Skrót",
+            "infoskrot",
+            "infoskrot.pl",
+            "info pigułka",
+            "skrót informacji"
+          ],
+          "url": "https://infoskrot.pl/",
+          "description": "Zwięzły skrót najważniejszych wiadomości z Polski, ze Świata oraz Pozytywne Wiadomości. Szybka prasówka w 2-3 minuty bez szumu informacyjnego z linkami do źródeł."
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://infoskrot.pl/#organization",
+          "name": "InfoSkrót",
+          "url": "https://infoskrot.pl/",
+          "logo": "https://infoskrot.pl/assets/android-chrome-512x512.png",
+          "publishingPrinciples": "https://infoskrot.pl/",
+          "knowsAbout": ["Wiadomości z Polski", "Wiadomości ze Świata", "Pozytywne wiadomości", "Gospodarka", "Technologia"]
+        }
+      ]
     }
     </script>
 

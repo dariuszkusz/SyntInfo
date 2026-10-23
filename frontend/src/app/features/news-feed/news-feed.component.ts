@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { NewsStore } from '../../state/news.store';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
 import { flagPl } from '@ng-icons/flag-icons';
-import { lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles } from '@ng-icons/lucide';
+import { lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles, lucideInfo } from '@ng-icons/lucide';
 import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffee-button/buy-me-coffee-button.component';
 import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/newsletter-box.component';
 
@@ -11,7 +11,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
   selector: 'app-news-feed',
   standalone: true,
   imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent, NewsletterBoxComponent],
-  providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles })],
+  providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles, lucideInfo })],
   template: `
     <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30 overflow-x-hidden">
       <!-- Header -->
@@ -28,7 +28,14 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
               </span>
             </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <button 
+              (click)="isAboutModalOpen = true"
+              class="about-btn text-xs px-3 py-1.5 bg-white/80 hover:bg-white text-aux3 border border-aux1 rounded-xl shadow-xs transition-all font-semibold flex items-center gap-1.5 hover:shadow-sm"
+              title="Dowiedz się więcej o misji, sekcjach i etyce InfoSkrót">
+              <ng-icon name="lucideInfo" class="text-xs text-primary"></ng-icon>
+              <span>O projekcie</span>
+            </button>
             <app-buy-me-coffee-button></app-buy-me-coffee-button>
             @if (isDevMode) {
               <div class="hidden sm:flex items-center space-x-2">
@@ -259,16 +266,110 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
             InfoSkrót - Twój codzienny skrót informacji i wiadomości w pigułce.
           </p>
           <p class="text-[11px] text-aux2 opacity-70 leading-relaxed max-w-xl mx-auto">
-            Bądź na bieżąco każdego dnia bez szumu informacyjnego. Nasz portal agreguje najważniejsze wydarzenia z kraju i ze świata, serwując je w postaci zwięzłej info pigułki. Szybka prasówka i esencja wiadomości dostosowana do Twojego tempa życia.
+            Bądź na bieżąco każdego dnia bez szumu informacyjnego. Nasz portal agreguje najważniejsze wydarzenia z kraju i ze świata oraz selekcję wiadomości pozytywnych, serwując je w postaci zwięzłej info pigułki. Szybka prasówka i esencja wiadomości w 2–3 minuty.
           </p>
           <p class="text-[10px] text-aux2/70 max-w-lg mx-auto">
             Dbamy o transparentność: każde podsumowanie powstaje na bazie oficjalnych kanałów RSS i zawiera bezpośredni odsyłacz do pierwotnego artykułu u wydawcy.
           </p>
+          <div class="flex justify-center items-center gap-3 text-xs pt-1">
+            <button 
+              (click)="isAboutModalOpen = true" 
+              class="about-footer-link text-primary font-semibold hover:underline">
+              O projekcie i metodologii
+            </button>
+            <span class="opacity-30">•</span>
+            <a href="mailto:kontakt@infoskrot.pl" class="text-aux2/70 hover:text-aux3 transition-colors">
+              Zgłoś uwagę / kontakt
+            </a>
+          </div>
           <p class="text-[10px] text-aux2 opacity-40">
             &copy; 2026 InfoSkrót. Wszelkie prawa zastrzeżone.
           </p>
         </div>
       </footer>
+
+      <!-- About Modal -->
+      @if (isAboutModalOpen) {
+        <div 
+          class="about-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          (click)="isAboutModalOpen = false">
+          <div 
+            class="about-modal-container bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl border border-aux1/80 max-h-[90vh] overflow-y-auto space-y-6"
+            (click)="$event.stopPropagation()">
+            
+            <!-- Modal Header -->
+            <div class="flex items-start justify-between border-b border-aux1/50 pb-4">
+              <div class="flex items-center space-x-3">
+                <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
+                <div>
+                  <h2 class="text-xl font-bold text-aux3">O projekcie InfoSkrót</h2>
+                  <p class="text-xs text-aux2/60">Misja, sekcje tematyczne i etyka AI</p>
+                </div>
+              </div>
+              <button 
+                (click)="isAboutModalOpen = false" 
+                class="close-about-btn text-aux2/60 hover:text-aux3 p-1.5 rounded-full hover:bg-aux1/50 transition-colors"
+                title="Zamknij">
+                <ng-icon name="lucideX" class="text-base"></ng-icon>
+              </button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="space-y-4 text-xs sm:text-sm text-aux2 leading-relaxed">
+              <div>
+                <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
+                  <ng-icon name="lucideSparkles" class="text-primary text-xs"></ng-icon>
+                  Czym jest InfoSkrót?
+                </h3>
+                <p class="text-aux2/80">
+                  InfoSkrót to niezależny, nowoczesny agregator wiadomości. Naszym celem jest dostarczenie rzetelnej, zwięzłej prasówki w 2–3 minuty — bez szumu informacyjnego, sensacji, komentarzy politycznych i clickbaitu.
+                </p>
+              </div>
+
+              <div>
+                <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
+                  <ng-icon name="lucideLayers" class="text-primary text-xs"></ng-icon>
+                  Trzy główne sekcje
+                </h3>
+                <ul class="space-y-1.5 text-aux2/80 list-disc list-inside">
+                  <li><strong>Polska:</strong> Najważniejsze wydarzenia gospodarcze, społeczne i prawne z kraju.</li>
+                  <li><strong>Świat:</strong> Kluczowe procesy geopolityczne, technologiczne i globalne.</li>
+                  <li><strong>Pozytywne:</strong> Starannie wyselekcjonowane, budujące wiadomości z nauki, medycyny i ekologii — konstruktywna przeciwwaga dla pesymizmu.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
+                  <ng-icon name="lucideGlobe" class="text-primary text-xs"></ng-icon>
+                  Jak powstają streszczenia i etyka źródeł?
+                </h3>
+                <p class="text-aux2/80 mb-2">
+                  Treści są automatycznie agregowane z oficjalnych kanałów RSS wiodących redakcji prasowych. Modele sztucznej inteligencji syntetyzują same fakty, eliminując zbędne dygresje i clickbait.
+                </p>
+                <div class="p-3 bg-aux1/30 rounded-2xl border border-aux1/60 text-xs text-aux2/90">
+                  <strong>Szacunek dla dziennikarstwa:</strong> InfoSkrót nie zastępuje oryginalnych artykułów. Każde streszczenie zawiera wyraźną sekcję <em>Źródło</em> z bezpośrednim linkiem do publikacji wydawcy, umożliwiając pogłębioną lekturę u autorów.
+                </div>
+              </div>
+
+              <div>
+                <h3 class="font-bold text-aux3 text-sm mb-1">Aplikacja PWA</h3>
+                <p class="text-aux2/80">
+                  InfoSkrót jest Progresywną Aplikacją Webową (PWA). Możesz zainstalować ją bezpośrednio na ekranie głównym swojego smartfona lub komputera, korzystając z błyskawicznego dostępu offline.
+                </p>
+              </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="pt-4 border-t border-aux1/50 flex justify-end">
+              <button 
+                (click)="isAboutModalOpen = false" 
+                class="confirm-about-btn px-5 py-2 bg-aux3 text-white rounded-xl text-xs font-bold hover:bg-aux3/90 transition-all">
+                Rozumiem
+              </button>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `,
   styles: [
@@ -290,6 +391,7 @@ export class NewsFeedComponent implements OnInit {
   readonly isDevMode = isDevMode();
   // Newsletter MailerLite integration is active and verified
   readonly showNewsletter = true;
+  isAboutModalOpen = false;
 
   ngOnInit() {
     this.store.loadTopNews();
