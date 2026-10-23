@@ -238,4 +238,49 @@ describe('News Feed', () => {
       cy.contains('Pozytywna wiadomość ze świata').should('be.visible');
     });
   });
+
+  describe('Source Attribution & AI Transparency', () => {
+    it('should display visible source links with domain names and correct attributes', () => {
+      // Sekcja Źródło / Źródła
+      cy.contains('Źródło:').should('be.visible');
+
+      // Linki do źródeł
+      cy.get('.source-link').should('have.length', 3);
+      
+      // Sprawdzenie linków do serwisów
+      cy.contains('.source-link', 'tvn24.pl')
+        .should('be.visible')
+        .and('have.attr', 'href', 'https://tvn24.pl')
+        .and('have.attr', 'target', '_blank')
+        .and('have.attr', 'rel', 'noopener noreferrer')
+        .and('have.attr', 'itemprop', 'isBasedOn');
+
+      cy.contains('.source-link', 'bbc.com')
+        .should('be.visible')
+        .and('have.attr', 'href', 'https://bbc.com');
+
+      cy.contains('.source-link', 'dobrewiadomosci.net.pl')
+        .should('be.visible')
+        .and('have.attr', 'href', 'https://dobrewiadomosci.net.pl');
+    });
+
+    it('should include Schema.org NewsArticle semantic microdata on article cards', () => {
+      cy.get('article.article-card').first()
+        .should('have.attr', 'itemtype', 'https://schema.org/NewsArticle');
+
+      cy.get('article.article-card').first().within(() => {
+        cy.get('[itemprop="headline"]').should('be.visible');
+        cy.get('[itemprop="description"]').should('be.visible');
+        cy.get('[itemprop="datePublished"]').should('exist');
+      });
+    });
+
+    it('should display AI summary essence badge and transparency disclaimer', () => {
+      cy.get('.ai-essence-badge').should('have.length', 3);
+      cy.contains('Streszczenie AI').should('be.visible');
+      
+      // Transparentność w stopce
+      cy.contains('Dbamy o transparentność: każde podsumowanie powstaje na bazie oficjalnych kanałów RSS').should('be.visible');
+    });
+  });
 });
