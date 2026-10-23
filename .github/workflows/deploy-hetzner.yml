@@ -37,6 +37,8 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
             cd /opt/syntinfo
+            # Usuń stare katalogi kodu przed rozpakowaniem, aby usunięte pliki (np. CreateSocialPostDraftsCommandHandler.cs) nie zalegały na serwerze
+            rm -rf Backend frontend nginx Caddyfile
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
             # Create .env file from secrets only if it doesn't already exist
