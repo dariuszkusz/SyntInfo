@@ -17,7 +17,7 @@ services:
     container_name: syntinfo_pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@syntinfo.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
     ports:
       - "5050:80"
     restart: always
@@ -38,7 +38,7 @@ services:
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${POSTGRES_DB:-syntinfo_db};Username=${POSTGRES_USER:-synt_user};Password=${POSTGRES_PASSWORD}
       - OpenRouter__ApiKey=${OPENROUTER_API_KEY}
       - Search__TavilyApiKey=${TAVILY_API_KEY}
-      - GoogleAiStudio__ApiKey=${GOOGLE_AI_KEY}
+      - GoogleAiStudio__ApiKey=${GOOGLE_AI_KEY:-${PLACEHOLDER_GOOGLE_KEY}}
       - Serilog__WriteTo__1__Args__path=${SERILOG_PATH:-/app/logs/log-.txt}
       - FrontendUrl=${FRONTEND_URL:-https://infoskrot.pl}
       - Admin__ApiKey=${ADMIN_API_KEY}
