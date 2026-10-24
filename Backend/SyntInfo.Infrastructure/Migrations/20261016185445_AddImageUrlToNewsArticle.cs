@@ -2,28 +2,27 @@
 
 #nullable disable
 
-namespace SyntInfo.Infrastructure.Migrations
+namespace SyntInfo.Infrastructure.Migrations;
+
+/// <inheritdoc />
+public partial class AddImageUrlToNewsArticle : Migration
 {
     /// <inheritdoc />
-    public partial class AddImageUrlToNewsArticle : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.AddColumn<string>(
-                name: "ImageUrl",
-                table: "NewsArticles",
-                type: "character varying(1000)",
-                maxLength: 1000,
-                nullable: true);
-        }
+        migrationBuilder.AddColumn<string>(
+            name: "ImageUrl",
+            table: "NewsArticles",
+            type: "character varying(1000)",
+            maxLength: 1000,
+            nullable: true);
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropColumn(
-                name: "ImageUrl",
-                table: "NewsArticles");
-        }
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropColumn(
+            name: "ImageUrl",
+            table: "NewsArticles");
     }
 }

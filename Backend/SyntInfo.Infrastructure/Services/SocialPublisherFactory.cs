@@ -1,6 +1,3 @@
-using SyntInfo.Application.Interfaces;
-using SyntInfo.Domain.Entities;
-
 namespace SyntInfo.Infrastructure.Services;
 
 public class SocialPublisherFactory : ISocialPublisherFactory

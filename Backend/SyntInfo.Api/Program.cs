@@ -2,11 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Quartz;
 using Serilog;
 using SyntInfo.Infrastructure.Persistence;
-using SyntInfo.Application.Interfaces;
 using SyntInfo.Domain.Interfaces;
 using Wolverine;
 using Scalar.AspNetCore;
 using SyntInfo.Api.Extensions;
+using SyntInfo.Application.Options;
 
 
 try
@@ -24,7 +24,7 @@ try
     builder.Host.UseWolverine(opts =>
     {
         opts.Discovery.IncludeAssembly(typeof(SyntInfo.Application.CQRS.Handlers.GetNewsArticlesQueryHandler).Assembly);
-        
+
         // Optymalizacja generowania kodu dla środowiska produkcyjnego
         opts.CodeGeneration.TypeLoadMode = builder.Environment.IsDevelopment()
             ? JasperFx.CodeGeneration.TypeLoadMode.Dynamic
@@ -34,6 +34,10 @@ try
         opts.CodeGeneration.AlwaysUseServiceLocationFor<AppDbContext>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<Microsoft.EntityFrameworkCore.DbContextOptions<AppDbContext>>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IUnitOfWork>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<INewsSourceRepository>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<INewsArticleRepository>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IRssFeedClient>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IWebMetadataExtractor>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IOpenRouterClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IGoogleAiStudioClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ISearchService>();
@@ -43,147 +47,154 @@ try
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IWykopClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHejtoClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IMailerLiteClient>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<Microsoft.Extensions.Options.IOptions<ProcessingOptions>>();
     });
 
 
-// Add services to the container.
-// PWA API: Baza Danych PostgreSQL z rozszerzeniem pgvector
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
-        o => o.UseVector().EnableRetryOnFailure()));
+    // Add services to the container.
+    builder.Services.Configure<ProcessingOptions>(builder.Configuration.GetSection(ProcessingOptions.SectionName));
+
+    // PWA API: Baza Danych PostgreSQL z rozszerzeniem pgvector
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
+            o => o.UseVector().EnableRetryOnFailure()));
 
 
-builder.Services.AddControllers()
-    .AddJsonOptions(opts =>
+    builder.Services.AddControllers()
+        .AddJsonOptions(opts =>
+        {
+            opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        });
+    // Konfiguracja Swagger / OpenAPI, Uwierzytelniania, CORS i Telegram Bot Client za pomocą metod rozszerzających
+    builder.Services.AddSwaggerDocumentation();
+    builder.Services.AddAdminAuthentication();
+    builder.Services.AddCorsPolicy(builder.Configuration);
+    builder.Services.AddTelegramBotClient();
+
+    // Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
+    builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+    builder.Services.AddScoped<INewsSourceRepository>(sp => sp.GetRequiredService<IUnitOfWork>().NewsSources);
+    builder.Services.AddScoped<INewsArticleRepository>(sp => sp.GetRequiredService<IUnitOfWork>().NewsArticles);
+    builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.TavilySearchService>(client =>
     {
-        opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        client.Timeout = TimeSpan.FromMinutes(10);
     });
-// Konfiguracja Swagger / OpenAPI, Uwierzytelniania, CORS i Telegram Bot Client za pomocą metod rozszerzających
-builder.Services.AddSwaggerDocumentation();
-builder.Services.AddAdminAuthentication();
-builder.Services.AddCorsPolicy(builder.Configuration);
-builder.Services.AddTelegramBotClient();
-
-// Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
-builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.TavilySearchService>(client => 
-{
-    client.Timeout = TimeSpan.FromMinutes(10);
-});
-builder.Services.AddHttpClient<INewsDiscoveryService, SyntInfo.Infrastructure.Services.TavilyNewsDiscoveryService>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
-builder.Services.AddHttpClient(string.Empty)
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    builder.Services.AddHttpClient<INewsDiscoveryService, SyntInfo.Infrastructure.Services.TavilyNewsDiscoveryService>(client =>
     {
-        AllowAutoRedirect = true
+        client.Timeout = TimeSpan.FromSeconds(30);
+    });
+    builder.Services.AddHttpClient<IRssFeedClient, SyntInfo.Infrastructure.Services.RssFeedClient>();
+    builder.Services.AddHttpClient<IWebMetadataExtractor, SyntInfo.Infrastructure.Services.WebMetadataExtractor>();
+    builder.Services.AddHttpClient(string.Empty)
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = true
+        });
+
+    builder.Services.AddHttpClient<IOpenRouterClient, SyntInfo.Infrastructure.Services.OpenRouterClient>(client =>
+    {
+        client.BaseAddress = new Uri(builder.Configuration["OpenRouter:BaseUrl"] ?? "https://openrouter.ai/api/v1/");
+        client.Timeout = TimeSpan.FromMinutes(10);
     });
 
-builder.Services.AddHttpClient<IOpenRouterClient, SyntInfo.Infrastructure.Services.OpenRouterClient>(client =>
-{
-    client.BaseAddress = new Uri(builder.Configuration["OpenRouter:BaseUrl"] ?? "https://openrouter.ai/api/v1/");
-    client.Timeout = TimeSpan.FromMinutes(10);
-});
-
-builder.Services.AddHttpClient<IGoogleAiStudioClient, SyntInfo.Infrastructure.Services.GoogleAiStudioClient>(client =>
-{
-    client.Timeout = TimeSpan.FromMinutes(10);
-});
-
-// Pamięć podręczna (dla tokenów OAuth2 Hejto itp.)
-builder.Services.AddMemoryCache();
-
-// Rejestracja modułu automatyzacji Social Media & Telegram
-builder.Services.AddHttpClient("WykopClient", client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
-builder.Services.AddHttpClient("HejtoClient", client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
-builder.Services.AddHttpClient("FacebookClient", client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
-builder.Services.AddHttpClient("MailerLiteClient", client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
-
-builder.Services.AddScoped<IWykopClient, SyntInfo.Infrastructure.Services.WykopClient>();
-builder.Services.AddScoped<IHejtoClient, SyntInfo.Infrastructure.Services.HejtoClient>();
-builder.Services.AddScoped<IFacebookClient, SyntInfo.Infrastructure.Services.FacebookClient>();
-builder.Services.AddScoped<IMailerLiteClient, SyntInfo.Infrastructure.Services.MailerLiteClient>();
-
-builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.WykopPublisher>();
-builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.HejtoPublisher>();
-builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.FacebookPublisher>();
-builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.NewsletterPublisher>();
-builder.Services.AddScoped<ISocialPostGenerator, SyntInfo.Infrastructure.Services.SocialPostGenerator>();
-builder.Services.AddScoped<ITelegramNotificationService, SyntInfo.Infrastructure.Services.TelegramNotificationService>();
-builder.Services.AddScoped<ISocialPublisherFactory, SyntInfo.Infrastructure.Services.SocialPublisherFactory>();
-
-// Konfiguracja zadań w tle (Quartz)
-builder.Services.AddQuartz(q =>
-{
-    var jobKey = new JobKey("RssFetcherJob");
-    q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.RssFetcherJob>(opts => opts.WithIdentity(jobKey));
-
-    TimeZoneInfo warsawTimeZone;
-    try
+    builder.Services.AddHttpClient<IGoogleAiStudioClient, SyntInfo.Infrastructure.Services.GoogleAiStudioClient>(client =>
     {
-        warsawTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
+        client.Timeout = TimeSpan.FromMinutes(10);
+    });
+
+    // Pamięć podręczna (dla tokenów OAuth2 Hejto itp.)
+    builder.Services.AddMemoryCache();
+
+    // Rejestracja modułu automatyzacji Social Media & Telegram
+    builder.Services.AddHttpClient("WykopClient", client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    });
+    builder.Services.AddHttpClient("HejtoClient", client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    });
+    builder.Services.AddHttpClient("FacebookClient", client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    });
+    builder.Services.AddHttpClient("MailerLiteClient", client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    });
+
+    builder.Services.AddScoped<IWykopClient, SyntInfo.Infrastructure.Services.WykopClient>();
+    builder.Services.AddScoped<IHejtoClient, SyntInfo.Infrastructure.Services.HejtoClient>();
+    builder.Services.AddScoped<IFacebookClient, SyntInfo.Infrastructure.Services.FacebookClient>();
+    builder.Services.AddScoped<IMailerLiteClient, SyntInfo.Infrastructure.Services.MailerLiteClient>();
+
+    builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.WykopPublisher>();
+    builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.HejtoPublisher>();
+    builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.FacebookPublisher>();
+    builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.NewsletterPublisher>();
+    builder.Services.AddScoped<ISocialPostGenerator, SyntInfo.Infrastructure.Services.SocialPostGenerator>();
+    builder.Services.AddScoped<ITelegramNotificationService, SyntInfo.Infrastructure.Services.TelegramNotificationService>();
+    builder.Services.AddScoped<ISocialPublisherFactory, SyntInfo.Infrastructure.Services.SocialPublisherFactory>();
+
+    // Konfiguracja zadań w tle (Quartz)
+    builder.Services.AddQuartz(q =>
+    {
+        var jobKey = new JobKey("RssFetcherJob");
+        q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.RssFetcherJob>(opts => opts.WithIdentity(jobKey));
+
+        TimeZoneInfo warsawTimeZone;
+        try
+        {
+            warsawTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            warsawTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
+        }
+
+        // Odpalanie 2 razy dziennie (7:00 i 19:00 czasu polskiego)
+        q.AddTrigger(opts => opts
+            .ForJob(jobKey)
+            .WithIdentity("RssFetcherJob-trigger")
+            .WithCronSchedule("0 0 7,19 * * ?", x => x.InTimeZone(warsawTimeZone)));
+
+        // Odpalanie publikacji/selekcji na platformy społecznościowe raz dziennie o 8:00 (czasu polskiego)
+        var socialJobKey = new JobKey("SocialCurationJob");
+        q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.SocialCurationJob>(opts => opts.WithIdentity(socialJobKey));
+
+        q.AddTrigger(opts => opts
+            .ForJob(socialJobKey)
+            .WithIdentity("SocialCurationJob-trigger")
+            .WithCronSchedule("0 0 8 * * ?", x => x.InTimeZone(warsawTimeZone)));
+    });
+    builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
+
+    var app = builder.Build();
+
+    // Konfiguracja specyfikacji OpenAPI i interfejsu Scalar UI (bez duplikatu Swagger UI)
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger(options =>
+        {
+            options.RouteTemplate = "openapi/{documentName}.json";
+        });
+
+        app.MapScalarApiReference(options =>
+        {
+            options
+                .WithTitle("SyntInfo API Reference")
+                .WithTheme(ScalarTheme.Moon);
+        });
     }
-    catch (TimeZoneNotFoundException)
+
+    if (app.Environment.IsDevelopment())
     {
-        warsawTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
+        app.UseHttpsRedirection();
     }
-
-    // Odpalanie 2 razy dziennie (7:00 i 19:00 czasu polskiego)
-    q.AddTrigger(opts => opts
-        .ForJob(jobKey)
-        .WithIdentity("RssFetcherJob-trigger")
-        .WithCronSchedule("0 0 7,19 * * ?", x => x.InTimeZone(warsawTimeZone)));
-
-    // Odpalanie publikacji/selekcji na platformy społecznościowe raz dziennie o 8:00 (czasu polskiego)
-    var socialJobKey = new JobKey("SocialCurationJob");
-    q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.SocialCurationJob>(opts => opts.WithIdentity(socialJobKey));
-
-    q.AddTrigger(opts => opts
-        .ForJob(socialJobKey)
-        .WithIdentity("SocialCurationJob-trigger")
-        .WithCronSchedule("0 0 8 * * ?", x => x.InTimeZone(warsawTimeZone)));
-});
-builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
-
-var app = builder.Build();
-
-// Konfiguracja specyfikacji OpenAPI i interfejsu Scalar UI (bez duplikatu Swagger UI)
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger(options =>
-    {
-        options.RouteTemplate = "openapi/{documentName}.json";
-    });
-
-    app.MapScalarApiReference(options =>
-    {
-        options
-            .WithTitle("SyntInfo API Reference")
-            .WithTheme(ScalarTheme.Moon);
-    });
-}
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
-app.UseCors("AllowAngular");
-app.UseAuthentication();
-app.UseAuthorization();
-app.MapControllers();
+    app.UseCors("AllowAngular");
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.MapControllers();
 
     using (var scope = app.Services.CreateScope())
     {

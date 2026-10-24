@@ -1,9 +1,8 @@
-namespace SyntInfo.Application.DTOs
+namespace SyntInfo.Application.DTOs;
+
+public class TopNewsResponse
 {
-    public class TopNewsResponse
-    {
-        public List<NewsArticleDto> Poland { get; set; } = new();
-        public List<NewsArticleDto> World { get; set; } = new();
-        public List<NewsArticleDto> Positive { get; set; } = new();
-    }
+    public List<NewsArticleDto> Poland { get; set; } = new();
+    public List<NewsArticleDto> World { get; set; } = new();
+    public List<NewsArticleDto> Positive { get; set; } = new();
 }

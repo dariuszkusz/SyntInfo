@@ -1,7 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.Logging;
 using SyntInfo.Application.CQRS.Commands;
-using SyntInfo.Application.Interfaces;
 
 namespace SyntInfo.Application.CQRS.Handlers;
 
@@ -10,8 +8,8 @@ public static class SubscribeNewsletterCommandHandler
     private static bool IsValidEmail([NotNullWhen(true)] string? email)
     {
         if (string.IsNullOrWhiteSpace(email)) return false;
-        return System.Net.Mail.MailAddress.TryCreate(email, out var address) 
-               && address.Address == email 
+        return System.Net.Mail.MailAddress.TryCreate(email, out var address)
+               && address.Address == email
                && email.Contains('.');
     }
 
@@ -54,8 +52,8 @@ public static class UnsubscribeNewsletterCommandHandler
     private static bool IsValidEmail([NotNullWhen(true)] string? email)
     {
         if (string.IsNullOrWhiteSpace(email)) return false;
-        return System.Net.Mail.MailAddress.TryCreate(email, out var address) 
-               && address.Address == email 
+        return System.Net.Mail.MailAddress.TryCreate(email, out var address)
+               && address.Address == email
                && email.Contains('.');
     }
 

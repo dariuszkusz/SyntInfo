@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Mvc;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine;
 

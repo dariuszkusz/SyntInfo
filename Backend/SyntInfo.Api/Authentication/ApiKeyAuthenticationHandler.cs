@@ -1,8 +1,6 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace SyntInfo.Api.Authentication;
@@ -62,7 +60,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         byte[] providedBytes = System.Text.Encoding.UTF8.GetBytes(providedKey);
         byte[] configuredBytes = System.Text.Encoding.UTF8.GetBytes(configuredKey);
 
-        if (providedBytes.Length != configuredBytes.Length || 
+        if (providedBytes.Length != configuredBytes.Length ||
             !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes))
         {
             return Task.FromResult(AuthenticateResult.Fail("Nieprawidłowy klucz administracyjny."));

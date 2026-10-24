@@ -1,567 +1,564 @@
 using Microsoft.EntityFrameworkCore;
 using CodeHollow.FeedReader;
 using SyntInfo.Application.CQRS.Commands;
-using SyntInfo.Domain.Entities;
-using SyntInfo.Domain.Interfaces;
 using Wolverine;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using SyntInfo.Application.Options;
 using System.Text.Json;
 using Wolverine.Attributes;
-using SyntInfo.Application.Interfaces;
-using SyntInfo.Application.Models.Tavily;
-using System.Net.Http.Json;
 using Pgvector.EntityFrameworkCore;
 
-namespace SyntInfo.Application.CQRS.Handlers
+namespace SyntInfo.Application.CQRS.Handlers;
+
+public class TriggerRssFetchCommandHandler
 {
-    public class TriggerRssFetchCommandHandler
+    private readonly IUnitOfWork _uow;
+    private readonly IMessageBus _bus;
+    private readonly IOpenRouterClient _openRouterClient;
+    private readonly IGoogleAiStudioClient _googleAiStudioClient;
+    private readonly ILogger<TriggerRssFetchCommandHandler> _logger;
+    private readonly ProcessingOptions _options;
+    private readonly IRssFeedClient _rssFeedClient;
+    private readonly INewsDiscoveryService _newsDiscoveryService;
+
+    public TriggerRssFetchCommandHandler(
+        IUnitOfWork uow,
+        IMessageBus bus,
+        IOpenRouterClient openRouterClient,
+        IGoogleAiStudioClient googleAiStudioClient,
+        ILogger<TriggerRssFetchCommandHandler> logger,
+        IOptions<ProcessingOptions> options,
+        IRssFeedClient rssFeedClient,
+        INewsDiscoveryService newsDiscoveryService)
     {
-        private readonly IUnitOfWork _uow;
-        private readonly IMessageBus _bus;
-        private readonly IOpenRouterClient _openRouterClient;
-        private readonly IGoogleAiStudioClient _googleAiStudioClient;
-        private readonly ILogger<TriggerRssFetchCommandHandler> _logger;
-        private readonly IConfiguration _configuration;
-        private readonly IHttpClientFactory _httpClientFactory;
-        private readonly INewsDiscoveryService _newsDiscoveryService;
+        _uow = uow;
+        _bus = bus;
+        _openRouterClient = openRouterClient;
+        _googleAiStudioClient = googleAiStudioClient;
+        _logger = logger;
+        _options = options.Value;
+        _rssFeedClient = rssFeedClient;
+        _newsDiscoveryService = newsDiscoveryService;
+    }
 
-        public TriggerRssFetchCommandHandler(
-            IUnitOfWork uow,
-            IMessageBus bus,
-            IOpenRouterClient openRouterClient,
-            IGoogleAiStudioClient googleAiStudioClient,
-            ILogger<TriggerRssFetchCommandHandler> logger,
-            IConfiguration configuration,
-            IHttpClientFactory httpClientFactory,
-            INewsDiscoveryService newsDiscoveryService)
+    [MessageTimeout(1800)] // 30 minut (potrzebne, bo artykuły są przetwarzane sekwencyjnie przez InvokeAsync)
+    public async Task Handle(TriggerRssFetchCommand _, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Rozpoczęto sprawdzanie feedów RSS.");
+
+        // 1. Dezaktywacja artykułów starszych niż 24h
+        await DeactivateExpiredNews(cancellationToken);
+
+        // 2. Pobranie nowych artykułów z feedów RSS
+        var newArticles = await FetchRssArticlesAsync(cancellationToken);
+
+        // 3. Uzupełnienie brakujących regionów przez Tavily Discovery
+        await FillMissingRegionsWithDiscoveryAsync(newArticles, cancellationToken);
+
+        // 4. Generowanie wektorów (embeddingów) dla nowych artykułów
+        var candidatesWithEmbeddings = await GenerateCandidateEmbeddingsAsync(newArticles, cancellationToken);
+
+        // 5. Klastrowanie semantyczne i deduplikacja z artykułami w bazie
+        var clusteredCandidates = await ClusterCandidatesAndDatabaseAsync(candidatesWithEmbeddings, cancellationToken);
+
+        // 6. Selekcja najważniejszych artykułów per region (z udziałem AI)
+        var commandsToExecute = await SelectArticlesToSummarizeAsync(clusteredCandidates, cancellationToken);
+
+        // 7. Wysłanie komend do streszczenia na szynę wiadomości
+        await DispatchSummarizeCommandsAsync(commandsToExecute, cancellationToken);
+    }
+
+    private async Task<List<SummarizeArticleCommand>> FetchRssArticlesAsync(CancellationToken cancellationToken)
+    {
+        var sources = await _uow.NewsSources.GetActiveSourcesAsync(cancellationToken);
+        var articles = new List<SummarizeArticleCommand>();
+
+        foreach (var source in sources)
         {
-            _uow = uow;
-            _bus = bus;
-            _openRouterClient = openRouterClient;
-            _googleAiStudioClient = googleAiStudioClient;
-            _logger = logger;
-            _configuration = configuration;
-            _httpClientFactory = httpClientFactory;
-            _newsDiscoveryService = newsDiscoveryService;
-        }
-
-        [MessageTimeout(1800)] // 30 minut (potrzebne, bo artykuły są przetwarzane sekwencyjnie przez InvokeAsync)
-        public async Task Handle(TriggerRssFetchCommand _, CancellationToken cancellationToken)
-        {
-            _logger.LogInformation("Rozpoczęto sprawdzanie feedów RSS.");
-
-            // Dezaktywacja artykułów starszych niż 24h
-            var expiredCutoff = DateTime.UtcNow.AddHours(-24);
-            var expiredArticles = await _uow.Repository<NewsArticle>().Query()
-                .Where(a => a.IsActive && a.PublishedAt < expiredCutoff)
-                .ToListAsync(cancellationToken);
-
-            if (expiredArticles.Any())
-            {
-                _logger.LogInformation("Dezaktywacja {Count} przestarzałych artykułów.", expiredArticles.Count);
-                foreach (var article in expiredArticles)
-                {
-                    article.IsActive = false;
-                    _uow.Repository<NewsArticle>().Update(article);
-                }
-                await _uow.SaveChangesAsync(cancellationToken);
-            }
-
-            var sources = await _uow.Repository<NewsSource>().Query()
-                .Where(s => s.IsActive)
-                .ToListAsync(cancellationToken);
-
-            var newArticlesToProcess = new List<SummarizeArticleCommand>();
-
-            foreach (var source in sources)
-            {
-                try
-                {
-                    var client = _httpClientFactory.CreateClient();
-                    client.Timeout = TimeSpan.FromSeconds(30);
-
-                    // Lepsze nagłówki, aby uniknąć 403 Forbidden (np. TVN24)
-                    client.DefaultRequestHeaders.Clear();
-                    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
-                    client.DefaultRequestHeaders.Add("Accept", "application/xml, text/xml, application/rss+xml, */*");
-                    client.DefaultRequestHeaders.Add("Accept-Language", "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7");
-                    client.DefaultRequestHeaders.Add("Cache-Control", "no-cache");
-                    client.DefaultRequestHeaders.Add("Pragma", "no-cache");
-
-                    var currentUrl = source.RssUrl;
-                    HttpResponseMessage response = null!;
-                    int redirectCount = 0;
-                    const int maxRedirects = 5;
-
-                    while (redirectCount <= maxRedirects)
-                    {
-                        response = await client.GetAsync(currentUrl, cancellationToken);
-                        if ((int)response.StatusCode >= 300 && (int)response.StatusCode < 400)
-                        {
-                            var location = response.Headers.Location;
-                            if (location != null)
-                            {
-                                if (!location.IsAbsoluteUri)
-                                {
-                                    location = new Uri(new Uri(currentUrl), location);
-                                }
-                                currentUrl = location.ToString();
-                                redirectCount++;
-                                _logger.LogInformation("Podążanie za przekierowaniem RSS ({Count}/{Max}) do: {RedirectUrl}", redirectCount, maxRedirects, currentUrl);
-                                continue;
-                            }
-                        }
-                        break;
-                    }
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                            _logger.LogWarning("Źródło RSS nie zostało znalezione (404): {SourceUrl}", source.RssUrl);
-                        else if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
-                            _logger.LogWarning("Dostęp do RSS zabroniony (403). Próba obejścia nagłówkami nie powiodła się: {SourceUrl}", source.RssUrl);
-                        else if ((int)response.StatusCode >= 300 && (int)response.StatusCode < 400)
-                            _logger.LogWarning("RSS zwrócił przekierowanie {StatusCode} ({CodeInt}), którego HttpClient nie podążył (przekroczono limit lub brak nagłówka Location): {SourceUrl}", response.StatusCode, (int)response.StatusCode, source.RssUrl);
-                        else
-                            _logger.LogWarning("Błąd podczas pobierania RSS {StatusCode}: {SourceUrl}", response.StatusCode, source.RssUrl);
-
-                        continue;
-                    }
-
-                    var rssContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                    var feed = FeedReader.ReadFromString(rssContent);
-
-                    foreach (var item in feed.Items.Take(20))
-                    {
-                        var url = item.Link;
-                        var exists = await _uow.Repository<NewsArticle>().Query()
-                            .AnyAsync(a => a.SourceUrls.Contains(url) || a.Title == item.Title, cancellationToken);
-
-                        if (!exists)
-                        {
-                            var content = !string.IsNullOrWhiteSpace(item.Description) ? item.Description : item.Content;
-                            if (string.IsNullOrWhiteSpace(content)) content = item.Title;
-                            var imageUrl = ExtractImageUrl(item);
-
-                            newArticlesToProcess.Add(new SummarizeArticleCommand(
-                                item.Title,
-                                content,
-                                url,
-                                item.PublishingDate ?? DateTime.UtcNow,
-                                source.Id,
-                                source.Region,
-                                null,
-                                null,
-                                imageUrl
-                            ));
-                        }
-                    }
-
-                    source.LastFetchedAt = DateTime.UtcNow;
-                    _uow.Repository<NewsSource>().Update(source);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Wystąpił błąd podczas pobierania feedu z {SourceUrl}", source.RssUrl);
-                }
-            }
-
-            await _uow.SaveChangesAsync(cancellationToken);
-
-            var maxPerRegion = _configuration.GetValue("ProcessingSettings:MaxArticlesPerRegion", 10);
-
-            // Jesli RSS nie zwrócił nic dla danego regionu, użyj Discovery przez Tavily
-            if (!newArticlesToProcess.Any(a => a.Region == SourceRegion.Poland))
-            {
-                _logger.LogInformation("Brak nowych artykułów z RSS dla Polski. Uruchamiam Discovery przez Tavily...");
-                var discovered = await DiscoverNewsWithTavilyAsync(SourceRegion.Poland, cancellationToken);
-                newArticlesToProcess.AddRange(discovered);
-            }
-
-            if (!newArticlesToProcess.Any(a => a.Region == SourceRegion.World))
-            {
-                _logger.LogInformation("Brak nowych artykułów z RSS dla Świata. Uruchamiam Discovery przez Tavily...");
-                var discovered = await DiscoverNewsWithTavilyAsync(SourceRegion.World, cancellationToken);
-                newArticlesToProcess.AddRange(discovered);
-            }
-
-            if (!newArticlesToProcess.Any(a => a.Region == SourceRegion.Positive))
-            {
-                _logger.LogInformation("Brak nowych artykułów z RSS dla Pozytywnych wiadomości. Uruchamiam Discovery przez Tavily...");
-                var discovered = await DiscoverNewsWithTavilyAsync(SourceRegion.Positive, cancellationToken);
-                newArticlesToProcess.AddRange(discovered);
-            }
-
-            _logger.LogInformation("Rozpoczęto generowanie embeddingów dla {Count} nowych artykułów.", newArticlesToProcess.Count);
-            var candidatesWithEmbeddings = new List<(SummarizeArticleCommand Command, float[] Embedding)>();
-            foreach (var candidate in newArticlesToProcess)
-            {
-                try
-                {
-                    var textToEmbed = $"{candidate.Title} {candidate.Content}".Trim();
-                    var embedding = await _openRouterClient.GenerateEmbeddingsAsync(textToEmbed, cancellationToken);
-                    if (embedding != null && embedding.Length > 0)
-                    {
-                        candidatesWithEmbeddings.Add((candidate, embedding));
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Wygenerowano pusty embedding dla artykułu: {Title}", candidate.Title);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Błąd generowania embeddingu dla artykułu: {Title}", candidate.Title);
-                }
-            }
-
-            _logger.LogInformation("Rozpoczęto klastrowanie semantyczne dla {Count} artykułów z embeddingami.", candidatesWithEmbeddings.Count);
-            var clusteredCandidates = await ClusterCandidatesAndDatabaseAsync(candidatesWithEmbeddings, cancellationToken);
-
-            var allCommands = new List<SummarizeArticleCommand>();
-            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.World, clusteredCandidates.Where(a => a.Region == SourceRegion.World).ToList(), maxPerRegion, cancellationToken));
-            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.Poland, clusteredCandidates.Where(a => a.Region == SourceRegion.Poland).ToList(), maxPerRegion, cancellationToken));
-            allCommands.AddRange(await GetCommandsToExecuteAsync(SourceRegion.Positive, clusteredCandidates.Where(a => a.Region == SourceRegion.Positive).ToList(), 3, cancellationToken));
-
-            if (allCommands.Any())
-            {
-                _logger.LogInformation("Wywoływanie SummarizeArticleCommand dla {Count} skonsolidowanych klastrów.", allCommands.Count);
-                foreach (var cmd in allCommands)
-                {
-                    await _bus.InvokeAsync(cmd, cancellationToken);
-                }
-            }
-        }
-
-        private async Task<List<SummarizeArticleCommand>> DiscoverNewsWithTavilyAsync(SourceRegion region, CancellationToken cancellationToken)
-        {
-            var discovered = new List<SummarizeArticleCommand>();
             try
             {
-                var items = await _newsDiscoveryService.DiscoverNewsAsync(region, cancellationToken);
-                foreach (var item in items)
+                var feed = await _rssFeedClient.FetchFeedAsync(source.RssUrl, cancellationToken);
+                if (feed == null)
                 {
-                    // Sprawdź czy już nie mamy tego linku lub tytułu w bazie
-                    var exists = await _uow.Repository<NewsArticle>().Query()
-                        .AnyAsync(a => a.SourceUrls.Contains(item.Url) || a.Title == item.Title, cancellationToken);
+                    continue;
+                }
+
+                foreach (var item in feed.Items.Take(20))
+                {
+                    var url = item.Link;
+                    var exists = await _uow.NewsArticles.ExistsByUrlOrTitleAsync(url, item.Title, cancellationToken);
 
                     if (!exists)
                     {
-                        discovered.Add(new SummarizeArticleCommand(
+                        var content = GetBestContent(item);
+                        var imageUrl = ExtractImageUrl(item);
+
+                        articles.Add(new SummarizeArticleCommand(
                             item.Title,
-                            item.Content,
-                            item.Url,
-                            item.PublishedAt,
-                            Guid.Empty, // Brak konkretnego źródła RSS
-                            region
+                            content,
+                            url,
+                            item.PublishingDate ?? DateTime.UtcNow,
+                            source.Id,
+                            source.Region,
+                            null,
+                            null,
+                            imageUrl
                         ));
                     }
                 }
+
+                source.LastFetchedAt = DateTime.UtcNow;
+                _uow.NewsSources.Update(source);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas Discovery dla regionu {Region}", region);
+                _logger.LogError(ex, "Wystąpił błąd podczas przetwarzania feedu ze źródła {SourceName} ({SourceUrl})", source.Name, source.RssUrl);
             }
-
-            return discovered;
         }
 
-        private async Task<List<SummarizeArticleCommand>> GetCommandsToExecuteAsync(SourceRegion region, List<SummarizeArticleCommand> newCandidates, int maxPerRegion, CancellationToken cancellationToken)
+        await _uow.SaveChangesAsync(cancellationToken);
+        return articles;
+    }
+
+    private async Task FillMissingRegionsWithDiscoveryAsync(
+        List<SummarizeArticleCommand> articles,
+        CancellationToken cancellationToken)
+    {
+        foreach (var region in Enum.GetValues<SourceRegion>())
         {
-            var commandsToExecute = new List<SummarizeArticleCommand>();
+            if (!articles.Any(a => a.Region == region))
+            {
+                _logger.LogInformation("Brak nowych artykułów z RSS dla regionu {Region}. Uruchamiam Discovery przez Tavily...", region);
+                var discovered = await DiscoverNewsWithTavilyAsync(region, cancellationToken);
+                articles.AddRange(discovered);
+            }
+        }
+    }
+
+    private async Task<List<(SummarizeArticleCommand Command, float[] Embedding)>> GenerateCandidateEmbeddingsAsync(
+        List<SummarizeArticleCommand> candidates,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Rozpoczęto generowanie embeddingów dla {Count} nowych artykułów.", candidates.Count);
+        var candidatesWithEmbeddings = new List<(SummarizeArticleCommand Command, float[] Embedding)>();
+
+        foreach (var candidate in candidates)
+        {
             try
             {
-                var cutoffDate = DateTime.UtcNow.AddHours(-24);
-                var oldActiveArticles = await _uow.Repository<NewsArticle>().Query()
-                    .Where(a => a.Region == region && a.IsActive && a.PublishedAt >= cutoffDate)
-                    .ToListAsync(cancellationToken);
-
-                if (newCandidates == null || !newCandidates.Any())
+                var textToEmbed = $"{candidate.Title} {candidate.Content}".Trim();
+                var embedding = await _openRouterClient.GenerateEmbeddingsAsync(textToEmbed, cancellationToken);
+                if (embedding != null && embedding.Length > 0)
                 {
-                    return commandsToExecute;
-                }
-
-                var limitedOldArticles = oldActiveArticles.OrderByDescending(a => a.PublishedAt).Take(20).ToList();
-                var limitedNewCandidates = newCandidates.OrderByDescending(c => c.PublishedAt).Take(50).ToList();
-
-                var selectionList = new List<object>();
-                foreach (var old in limitedOldArticles)
-                {
-                    selectionList.Add(new { index = selectionList.Count, title = old.Title, type = "old" });
-                }
-                int newStartIndex = selectionList.Count;
-                foreach (var cand in limitedNewCandidates)
-                {
-                    selectionList.Add(new { index = selectionList.Count, title = cand.Title, type = "new" });
-                }
-
-                if (selectionList.Count <= maxPerRegion)
-                {
-                    commandsToExecute.AddRange(limitedNewCandidates);
-                    return commandsToExecute;
-                }
-
-                var jsonStr = JsonSerializer.Serialize(selectionList);
-                var prompt = region == SourceRegion.Positive
-                    ? $"Analizujesz kandydatów do sekcji POZYTYWNYCH WIADOMOŚCI. Z poniższej listy JSON wybierz DOKŁADNIE do {maxPerRegion} artykułów, które są jednoznacznie i bezsprzecznie pozytywne, budujące i inspirujące (odrzucaj wszelkie straty, tragedie, problemy rolnicze/gospodarcze i kryzysy). Zwróć tylko tablicę numerów index, np. [1, 5]. Jeśli żaden nie pasuje, zwróć [].\n\n{jsonStr}"
-                    : $"Analizujesz newsy dla regionu {region}. Z poniższej listy JSON wybierz DOKŁADNIE {maxPerRegion} najważniejszych newsów. Zwróć tylko tablicę numerów index, np. [1, 5, 12].\n\n{jsonStr}";
-
-                var selectedIndexes = await _googleAiStudioClient.SelectTopArticlesIndexesAsync(prompt, maxPerRegion, region, cancellationToken);
-
-                if (selectedIndexes == null || !selectedIndexes.Any())
-                {
-                    if (region == SourceRegion.Positive)
-                    {
-                        _logger.LogInformation("Brak kandydatów spełniających rygorystyczne kryteria pozytywnych wiadomości.");
-                        return commandsToExecute;
-                    }
-
-                    commandsToExecute.AddRange(limitedNewCandidates.Take(maxPerRegion));
-                    return commandsToExecute;
-                }
-
-                foreach (var i in selectedIndexes)
-                {
-                    if (i >= newStartIndex && i < selectionList.Count)
-                    {
-                        commandsToExecute.Add(limitedNewCandidates[i - newStartIndex]);
-                    }
-                }
-
-                return commandsToExecute;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Błąd w GetCommandsToExecuteAsync dla regionu {Region}", region);
-                return commandsToExecute;
-            }
-        }
-
-        private async Task<List<SummarizeArticleCommand>> ClusterCandidatesAndDatabaseAsync(
-            List<(SummarizeArticleCommand Command, float[] Embedding)> candidatesWithEmbeddings,
-            CancellationToken cancellationToken)
-        {
-            var clusters = new List<ArticleCluster>();
-
-            foreach (var (candidate, embedding) in candidatesWithEmbeddings)
-            {
-                var targetVector = new Pgvector.Vector(embedding);
-                var startOfDay = candidate.PublishedAt.Date.ToUniversalTime();
-                var endOfDay = startOfDay.AddDays(1);
-
-                // Szukamy w bazie artykułów z tego samego dnia o podobieństwie > 0.82 (CosineDistance < 0.18)
-                var similarDbArticles = await _uow.Repository<NewsArticle>().Query()
-                    .Where(a => a.Embedding != null
-                             && a.PublishedAt >= startOfDay
-                             && a.PublishedAt < endOfDay
-                             && a.Embedding.CosineDistance(targetVector) < 0.18)
-                    .ToListAsync(cancellationToken);
-
-                var primaryDbArticle = similarDbArticles.FirstOrDefault();
-
-                if (primaryDbArticle != null)
-                {
-                    // Szukamy istniejącego klastra powiązanego z tym samym artykułem z bazy
-                    var existingCluster = clusters.FirstOrDefault(c => c.ExistingArticle != null && c.ExistingArticle.Id == primaryDbArticle.Id);
-                    if (existingCluster != null)
-                    {
-                        existingCluster.Candidates.Add(candidate);
-                    }
-                    else
-                    {
-                        clusters.Add(new ArticleCluster
-                        {
-                            ExistingArticle = primaryDbArticle,
-                            Candidates = new List<SummarizeArticleCommand> { candidate },
-                            RepresentativeEmbedding = embedding
-                        });
-                    }
+                    candidatesWithEmbeddings.Add((candidate, embedding));
                 }
                 else
                 {
-                    // Szukamy pasującego klastra wśród już utworzonych
-                    ArticleCluster? matchedCluster = null;
-                    foreach (var cluster in clusters)
-                    {
-                        double similarity = 0;
-                        if (cluster.ExistingArticle != null && cluster.ExistingArticle.Embedding != null)
-                        {
-                            similarity = CalculateCosineSimilarity(embedding, cluster.ExistingArticle.Embedding.ToArray());
-                        }
-                        else
-                        {
-                            similarity = CalculateCosineSimilarity(embedding, cluster.RepresentativeEmbedding);
-                        }
+                    _logger.LogWarning("Wygenerowano pusty embedding dla artykułu: {Title}", candidate.Title);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd generowania embeddingu dla artykułu: {Title}", candidate.Title);
+            }
+        }
 
-                        if (similarity > 0.82)
-                        {
-                            matchedCluster = cluster;
-                            break;
-                        }
-                    }
+        return candidatesWithEmbeddings;
+    }
 
-                    if (matchedCluster != null)
-                    {
-                        matchedCluster.Candidates.Add(candidate);
-                    }
-                    else
-                    {
-                        clusters.Add(new ArticleCluster
-                        {
-                            ExistingArticle = null,
-                            Candidates = new List<SummarizeArticleCommand> { candidate },
-                            RepresentativeEmbedding = embedding
-                        });
-                    }
+    private async Task DispatchSummarizeCommandsAsync(
+        IReadOnlyCollection<SummarizeArticleCommand> commands,
+        CancellationToken cancellationToken)
+    {
+        if (!commands.Any())
+        {
+            return;
+        }
+
+        _logger.LogInformation("Wywoływanie SummarizeArticleCommand dla {Count} skonsolidowanych klastrów.", commands.Count);
+        foreach (var cmd in commands)
+        {
+            await _bus.InvokeAsync(cmd, cancellationToken);
+        }
+    }
+
+    private async Task<List<SummarizeArticleCommand>> SelectArticlesToSummarizeAsync(
+        List<SummarizeArticleCommand> clusteredCandidates,
+        CancellationToken cancellationToken)
+    {
+        var commands = new List<SummarizeArticleCommand>();
+
+        foreach (var region in Enum.GetValues<SourceRegion>())
+        {
+            var candidatesForRegion = clusteredCandidates.Where(a => a.Region == region).ToList();
+            var limit = region == SourceRegion.Positive ? _options.MaxPositiveArticles : _options.MaxArticlesPerRegion;
+
+            var selected = await GetCommandsToExecuteAsync(region, candidatesForRegion, limit, cancellationToken);
+            commands.AddRange(selected);
+        }
+
+        return commands;
+    }
+
+
+    private async Task DeactivateExpiredNews(CancellationToken cancellationToken)
+    {
+        var expiredCutoff = DateTime.UtcNow.AddHours(-24);
+        var expiredArticles = await _uow.Repository<NewsArticle>().Query()
+            .Where(a => a.IsActive && a.PublishedAt < expiredCutoff)
+            .ToListAsync(cancellationToken);
+
+        if (expiredArticles.Any())
+        {
+            _logger.LogInformation("Dezaktywacja {Count} przestarzałych artykułów.", expiredArticles.Count);
+            foreach (var article in expiredArticles)
+            {
+                article.IsActive = false;
+                _uow.Repository<NewsArticle>().Update(article);
+            }
+            await _uow.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private async Task<List<SummarizeArticleCommand>> DiscoverNewsWithTavilyAsync(SourceRegion region, CancellationToken cancellationToken)
+    {
+        var discovered = new List<SummarizeArticleCommand>();
+        try
+        {
+            var items = await _newsDiscoveryService.DiscoverNewsAsync(region, cancellationToken);
+            foreach (var item in items)
+            {
+                // Sprawdź czy już nie mamy tego linku lub tytułu w bazie
+                var exists = await _uow.NewsArticles.ExistsByUrlOrTitleAsync(item.Url, item.Title, cancellationToken);
+
+                if (!exists)
+                {
+                    discovered.Add(new SummarizeArticleCommand(
+                        item.Title,
+                        item.Content,
+                        item.Url,
+                        item.PublishedAt,
+                        Guid.Empty, // Brak konkretnego źródła RSS
+                        region
+                    ));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd podczas Discovery dla regionu {Region}", region);
+        }
+
+        return discovered;
+    }
+
+    private async Task<List<SummarizeArticleCommand>> GetCommandsToExecuteAsync(SourceRegion region, List<SummarizeArticleCommand> newCandidates, int maxPerRegion, CancellationToken cancellationToken)
+    {
+        var commandsToExecute = new List<SummarizeArticleCommand>();
+        try
+        {
+            var cutoffDate = DateTime.UtcNow.AddHours(-24);
+            var oldActiveArticles = await _uow.Repository<NewsArticle>().Query()
+                .Where(a => a.Region == region && a.IsActive && a.PublishedAt >= cutoffDate)
+                .ToListAsync(cancellationToken);
+
+            if (newCandidates == null || !newCandidates.Any())
+            {
+                return commandsToExecute;
+            }
+
+            var limitedOldArticles = oldActiveArticles.OrderByDescending(a => a.PublishedAt).Take(20).ToList();
+            var limitedNewCandidates = newCandidates.OrderByDescending(c => c.PublishedAt).Take(50).ToList();
+
+            var selectionList = new List<object>();
+            foreach (var old in limitedOldArticles)
+            {
+                selectionList.Add(new { index = selectionList.Count, title = old.Title, type = "old" });
+            }
+            int newStartIndex = selectionList.Count;
+            foreach (var cand in limitedNewCandidates)
+            {
+                selectionList.Add(new { index = selectionList.Count, title = cand.Title, type = "new" });
+            }
+
+            if (selectionList.Count <= maxPerRegion)
+            {
+                commandsToExecute.AddRange(limitedNewCandidates);
+                return commandsToExecute;
+            }
+
+            var jsonStr = JsonSerializer.Serialize(selectionList);
+            var selectedIndexes = await _googleAiStudioClient.SelectTopArticlesIndexesAsync(jsonStr, maxPerRegion, region, cancellationToken);
+
+            if (selectedIndexes == null || !selectedIndexes.Any())
+            {
+                if (region == SourceRegion.Positive)
+                {
+                    _logger.LogInformation("Brak kandydatów spełniających rygorystyczne kryteria pozytywnych wiadomości.");
+                    return commandsToExecute;
+                }
+
+                commandsToExecute.AddRange(limitedNewCandidates.Take(maxPerRegion));
+                return commandsToExecute;
+            }
+
+            foreach (var i in selectedIndexes)
+            {
+                if (i >= newStartIndex && i < selectionList.Count)
+                {
+                    commandsToExecute.Add(limitedNewCandidates[i - newStartIndex]);
                 }
             }
 
-            var consolidatedCommands = new List<SummarizeArticleCommand>();
-            foreach (var cluster in clusters)
-            {
-                consolidatedCommands.Add(ConsolidateCluster(cluster));
-            }
+            return commandsToExecute;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd w GetCommandsToExecuteAsync dla regionu {Region}", region);
+            return commandsToExecute;
+        }
+    }
 
-            return consolidatedCommands;
+    private async Task<List<SummarizeArticleCommand>> ClusterCandidatesAndDatabaseAsync(
+        List<(SummarizeArticleCommand Command, float[] Embedding)> candidatesWithEmbeddings,
+        CancellationToken cancellationToken)
+    {
+        var clusters = new List<ArticleCluster>();
+
+        foreach (var (candidate, embedding) in candidatesWithEmbeddings)
+        {
+            var targetVector = new Pgvector.Vector(embedding);
+            var startOfDay = candidate.PublishedAt.Date.ToUniversalTime();
+            var endOfDay = startOfDay.AddDays(1);
+
+            // Szukamy w bazie artykułów z tego samego dnia o podobieństwie > 0.82 (CosineDistance < 0.18)
+            var similarDbArticles = await _uow.Repository<NewsArticle>().Query()
+                .Where(a => a.Embedding != null
+                         && a.PublishedAt >= startOfDay
+                         && a.PublishedAt < endOfDay
+                         && a.Embedding.CosineDistance(targetVector) < 0.18)
+                .ToListAsync(cancellationToken);
+
+            var primaryDbArticle = similarDbArticles.FirstOrDefault();
+
+            if (primaryDbArticle != null)
+            {
+                // Szukamy istniejącego klastra powiązanego z tym samym artykułem z bazy
+                var existingCluster = clusters.FirstOrDefault(c => c.ExistingArticle != null && c.ExistingArticle.Id == primaryDbArticle.Id);
+                if (existingCluster != null)
+                {
+                    existingCluster.Candidates.Add(candidate);
+                }
+                else
+                {
+                    clusters.Add(new ArticleCluster
+                    {
+                        ExistingArticle = primaryDbArticle,
+                        Candidates = new List<SummarizeArticleCommand> { candidate },
+                        RepresentativeEmbedding = embedding
+                    });
+                }
+            }
+            else
+            {
+                // Szukamy pasującego klastra wśród już utworzonych
+                ArticleCluster? matchedCluster = null;
+                foreach (var cluster in clusters)
+                {
+                    double similarity = 0;
+                    if (cluster.ExistingArticle != null && cluster.ExistingArticle.Embedding != null)
+                    {
+                        similarity = CalculateCosineSimilarity(embedding, cluster.ExistingArticle.Embedding.ToArray());
+                    }
+                    else
+                    {
+                        similarity = CalculateCosineSimilarity(embedding, cluster.RepresentativeEmbedding);
+                    }
+
+                    if (similarity > 0.82)
+                    {
+                        matchedCluster = cluster;
+                        break;
+                    }
+                }
+
+                if (matchedCluster != null)
+                {
+                    matchedCluster.Candidates.Add(candidate);
+                }
+                else
+                {
+                    clusters.Add(new ArticleCluster
+                    {
+                        ExistingArticle = null,
+                        Candidates = new List<SummarizeArticleCommand> { candidate },
+                        RepresentativeEmbedding = embedding
+                    });
+                }
+            }
         }
 
-        private SummarizeArticleCommand ConsolidateCluster(ArticleCluster cluster)
+        var consolidatedCommands = new List<SummarizeArticleCommand>();
+        foreach (var cluster in clusters)
         {
-            var allUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (cluster.ExistingArticle != null)
+            consolidatedCommands.Add(ConsolidateCluster(cluster));
+        }
+
+        return consolidatedCommands;
+    }
+
+    private SummarizeArticleCommand ConsolidateCluster(ArticleCluster cluster)
+    {
+        var allUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (cluster.ExistingArticle != null)
+        {
+            foreach (var url in cluster.ExistingArticle.SourceUrls)
             {
-                foreach (var url in cluster.ExistingArticle.SourceUrls)
+                allUrls.Add(url);
+            }
+        }
+
+        foreach (var cand in cluster.Candidates)
+        {
+            allUrls.Add(cand.Url);
+            if (cand.AdditionalUrls != null)
+            {
+                foreach (var url in cand.AdditionalUrls)
                 {
                     allUrls.Add(url);
                 }
             }
-
-            foreach (var cand in cluster.Candidates)
-            {
-                allUrls.Add(cand.Url);
-                if (cand.AdditionalUrls != null)
-                {
-                    foreach (var url in cand.AdditionalUrls)
-                    {
-                        allUrls.Add(url);
-                    }
-                }
-            }
-
-            var urlList = allUrls.ToList();
-            var primaryUrl = urlList.FirstOrDefault() ?? string.Empty;
-            var additionalUrls = urlList.Skip(1).ToList();
-
-            var representative = cluster.Candidates.OrderByDescending(c => c.Content.Length).First();
-
-            var contentBuilder = new System.Text.StringBuilder();
-
-            if (cluster.ExistingArticle != null)
-            {
-                contentBuilder.AppendLine($"[ISTNIEJĄCE PODSUMOWANIE]: {cluster.ExistingArticle.SummaryText}");
-                if (!string.IsNullOrWhiteSpace(cluster.ExistingArticle.DeepContent))
-                {
-                    contentBuilder.AppendLine($"[ISTNIEJĄCE FAKTY]: {cluster.ExistingArticle.DeepContent}");
-                }
-                contentBuilder.AppendLine();
-            }
-
-            contentBuilder.AppendLine("[NOWE MATERIAŁY ŹRÓDŁOWE]:");
-            foreach (var cand in cluster.Candidates)
-            {
-                contentBuilder.AppendLine($"Nagłówek: {cand.Title}");
-                contentBuilder.AppendLine($"Treść: {cand.Content}");
-                contentBuilder.AppendLine("---");
-            }
-
-            var consolidatedTitle = cluster.ExistingArticle != null ? cluster.ExistingArticle.Title : representative.Title;
-            var primaryImageUrl = cluster.ExistingArticle?.ImageUrl ?? cluster.Candidates.FirstOrDefault(c => !string.IsNullOrEmpty(c.ImageUrl))?.ImageUrl;
-
-            return new SummarizeArticleCommand(
-                consolidatedTitle,
-                contentBuilder.ToString(),
-                primaryUrl,
-                cluster.ExistingArticle != null ? cluster.ExistingArticle.PublishedAt : representative.PublishedAt,
-                representative.SourceId,
-                representative.Region,
-                additionalUrls,
-                cluster.ExistingArticle?.Id,
-                primaryImageUrl
-            );
         }
 
-        private static string? ExtractImageUrl(CodeHollow.FeedReader.FeedItem item)
+        var urlList = allUrls.ToList();
+        var primaryUrl = urlList.FirstOrDefault() ?? string.Empty;
+        var additionalUrls = urlList.Skip(1).ToList();
+
+        var representative = cluster.Candidates.OrderByDescending(c => c.Content.Length).First();
+
+        var contentBuilder = new System.Text.StringBuilder();
+
+        if (cluster.ExistingArticle != null)
         {
-            try
+            contentBuilder.AppendLine($"[ISTNIEJĄCE PODSUMOWANIE]: {cluster.ExistingArticle.SummaryText}");
+            if (!string.IsNullOrWhiteSpace(cluster.ExistingArticle.DeepContent))
             {
-                if (item.SpecificItem?.Element != null)
-                {
-                    var el = item.SpecificItem.Element;
-                    var enclosure = el.Elements().FirstOrDefault(e => e.Name.LocalName.Equals("enclosure", StringComparison.OrdinalIgnoreCase) && e.Attribute("type")?.Value.StartsWith("image/") == true);
-                    if (enclosure != null)
-                    {
-                        var url = enclosure.Attribute("url")?.Value;
-                        if (!string.IsNullOrWhiteSpace(url)) return url;
-                    }
+                contentBuilder.AppendLine($"[ISTNIEJĄCE FAKTY]: {cluster.ExistingArticle.DeepContent}");
+            }
+            contentBuilder.AppendLine();
+        }
 
-                    var media = el.Elements().FirstOrDefault(e => (e.Name.LocalName.Equals("content", StringComparison.OrdinalIgnoreCase) || e.Name.LocalName.Equals("thumbnail", StringComparison.OrdinalIgnoreCase)) && (e.Attribute("medium")?.Value == "image" || e.Attribute("url")?.Value.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) == true || e.Attribute("url")?.Value.EndsWith(".png", StringComparison.OrdinalIgnoreCase) == true || e.Attribute("type")?.Value.StartsWith("image/") == true || e.Attribute("url") != null));
-                    if (media != null)
-                    {
-                        var url = media.Attribute("url")?.Value;
-                        if (!string.IsNullOrWhiteSpace(url)) return url;
-                    }
+        contentBuilder.AppendLine("[NOWE MATERIAŁY ŹRÓDŁOWE]:");
+        foreach (var cand in cluster.Candidates)
+        {
+            contentBuilder.AppendLine($"Nagłówek: {cand.Title}");
+            contentBuilder.AppendLine($"Treść: {cand.Content}");
+            contentBuilder.AppendLine("---");
+        }
+
+        var consolidatedTitle = cluster.ExistingArticle != null ? cluster.ExistingArticle.Title : representative.Title;
+        var primaryImageUrl = cluster.ExistingArticle?.ImageUrl ?? cluster.Candidates.FirstOrDefault(c => !string.IsNullOrEmpty(c.ImageUrl))?.ImageUrl;
+
+        return new SummarizeArticleCommand(
+            consolidatedTitle,
+            contentBuilder.ToString(),
+            primaryUrl,
+            cluster.ExistingArticle != null ? cluster.ExistingArticle.PublishedAt : representative.PublishedAt,
+            representative.SourceId,
+            representative.Region,
+            additionalUrls,
+            cluster.ExistingArticle?.Id,
+            primaryImageUrl
+        );
+    }
+
+    private static string? ExtractImageUrl(CodeHollow.FeedReader.FeedItem item)
+    {
+        try
+        {
+            if (item.SpecificItem?.Element != null)
+            {
+                var el = item.SpecificItem.Element;
+                var enclosure = el.Elements().FirstOrDefault(e => e.Name.LocalName.Equals("enclosure", StringComparison.OrdinalIgnoreCase) && e.Attribute("type")?.Value.StartsWith("image/") == true);
+                if (enclosure != null)
+                {
+                    var url = enclosure.Attribute("url")?.Value;
+                    if (!string.IsNullOrWhiteSpace(url)) return url;
                 }
 
-                var contentToScan = $"{item.Description} {item.Content}";
-                if (!string.IsNullOrWhiteSpace(contentToScan))
+                var media = el.Elements().FirstOrDefault(e => (e.Name.LocalName.Equals("content", StringComparison.OrdinalIgnoreCase) || e.Name.LocalName.Equals("thumbnail", StringComparison.OrdinalIgnoreCase)) && (e.Attribute("medium")?.Value == "image" || e.Attribute("url")?.Value.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) == true || e.Attribute("url")?.Value.EndsWith(".png", StringComparison.OrdinalIgnoreCase) == true || e.Attribute("type")?.Value.StartsWith("image/") == true || e.Attribute("url") != null));
+                if (media != null)
                 {
-                    var match = System.Text.RegularExpressions.Regex.Match(contentToScan, @"<img[^>]+src=[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    if (match.Success)
+                    var url = media.Attribute("url")?.Value;
+                    if (!string.IsNullOrWhiteSpace(url)) return url;
+                }
+            }
+
+            var contentToScan = $"{item.Description} {item.Content}";
+            if (!string.IsNullOrWhiteSpace(contentToScan))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(contentToScan, @"<img[^>]+src=[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    var url = match.Groups[1].Value;
+                    if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                     {
-                        var url = match.Groups[1].Value;
-                        if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return url;
-                        }
+                        return url;
                     }
                 }
             }
-            catch
-            {
-                // Silently ignore extraction issues
-            }
-
-            return null;
         }
-
-        private class ArticleCluster
+        catch
         {
-            public NewsArticle? ExistingArticle { get; set; }
-            public List<SummarizeArticleCommand> Candidates { get; set; } = new();
-            public float[] RepresentativeEmbedding { get; set; } = Array.Empty<float>();
+            // Silently ignore extraction issues
         }
 
-        private static double CalculateCosineSimilarity(float[] vec1, float[] vec2)
+        return null;
+    }
+
+    private static string GetBestContent(FeedItem item)
+    {
+        var content = item.Content?.Trim();
+        var description = item.Description?.Trim();
+
+        // Wybierz dłuższy i bogatszy tekst spośród Content i Description
+        if (!string.IsNullOrWhiteSpace(content) && !string.IsNullOrWhiteSpace(description))
         {
-            if (vec1.Length != vec2.Length)
-                return 0;
-
-            double dotProduct = 0;
-            double normA = 0;
-            double normB = 0;
-
-            for (int i = 0; i < vec1.Length; i++)
-            {
-                dotProduct += vec1[i] * vec2[i];
-                normA += vec1[i] * vec1[i];
-                normB += vec2[i] * vec2[i];
-            }
-
-            if (normA == 0 || normB == 0)
-                return 0;
-
-            return dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB));
+            return content.Length >= description.Length ? content : description;
         }
+
+        if (!string.IsNullOrWhiteSpace(content)) return content;
+        if (!string.IsNullOrWhiteSpace(description)) return description;
+
+        return item.Title?.Trim() ?? string.Empty;
+    }
+
+    private class ArticleCluster
+    {
+        public NewsArticle? ExistingArticle { get; set; }
+        public List<SummarizeArticleCommand> Candidates { get; set; } = new();
+        public float[] RepresentativeEmbedding { get; set; } = Array.Empty<float>();
+    }
+
+    private static double CalculateCosineSimilarity(float[] vec1, float[] vec2)
+    {
+        if (vec1.Length != vec2.Length)
+            return 0;
+
+        double dotProduct = 0;
+        double normA = 0;
+        double normB = 0;
+
+        for (int i = 0; i < vec1.Length; i++)
+        {
+            dotProduct += vec1[i] * vec2[i];
+            normA += vec1[i] * vec1[i];
+            normB += vec2[i] * vec2[i];
+        }
+
+        if (normA == 0 || normB == 0)
+            return 0;
+
+        return dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB));
     }
 }

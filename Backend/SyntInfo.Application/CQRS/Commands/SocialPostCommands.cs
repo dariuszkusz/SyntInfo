@@ -1,5 +1,3 @@
-using SyntInfo.Domain.Entities;
-
 namespace SyntInfo.Application.CQRS.Commands;
 
 
