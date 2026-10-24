@@ -285,27 +285,25 @@ describe('News Feed', () => {
   });
 
   describe('About Project Modal', () => {
-    it('should open and close about modal from header button', () => {
+    it('should open about modal from header button and close with return button', () => {
       cy.get('.about-btn').click();
       cy.get('.about-modal-container').should('be.visible');
       cy.contains('O projekcie InfoSkrót').should('be.visible');
       cy.contains('Polska:').should('be.visible');
       cy.contains('Świat:').should('be.visible');
-      cy.contains('Pozytywne:').should('be.visible');
-      cy.contains('Szacunek dla twórców:').should('be.visible');
-      cy.get('.confirm-about-btn').scrollIntoView().should('be.visible');
-
-      // Zamknięcie przez X
-      cy.get('.close-about-btn').click();
+      cy.contains('Transparentność i szacunek dla twórców').should('be.visible');
+      
+      // Przycisk "Powrót do prasówki" powinien być od razu widoczny bez scrollowania
+      cy.contains('.confirm-about-btn', 'Powrót do prasówki').should('be.visible').click();
       cy.get('.about-modal-container').should('not.exist');
     });
 
-    it('should open about modal from footer link and close with confirm button', () => {
+    it('should open about modal from footer link and close when clicking backdrop', () => {
       cy.get('.about-footer-link').click();
       cy.get('.about-modal-container').should('be.visible');
 
-      // Zamknięcie przez "Przejdź do prasówki"
-      cy.get('.confirm-about-btn').click({ force: true });
+      // Zamknięcie przez kliknięcie w tło
+      cy.get('.about-modal-backdrop').click(10, 10);
       cy.get('.about-modal-container').should('not.exist');
     });
   });

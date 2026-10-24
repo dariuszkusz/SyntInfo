@@ -291,90 +291,78 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
       <!-- About Modal -->
       @if (isAboutModalOpen) {
         <div 
-          class="about-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          class="about-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs"
           (click)="isAboutModalOpen = false">
           <div 
-            class="about-modal-container bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl border border-aux1/80 max-h-[90vh] overflow-y-auto space-y-6"
+            class="about-modal-container bg-white rounded-3xl p-5 sm:p-6 max-w-2xl w-full shadow-2xl border border-aux1/80 space-y-3.5"
             (click)="$event.stopPropagation()">
             
             <!-- Modal Header -->
-            <div class="flex items-start justify-between border-b border-aux1/50 pb-4">
-              <div class="flex items-center space-x-3">
-                <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
-                <div>
-                  <h2 class="text-xl font-bold text-aux3">O projekcie InfoSkrót</h2>
-                  <p class="text-xs text-aux2/60">Higiena cyfrowa, etyka AI i rzetelna prasówka</p>
-                </div>
+            <div class="flex items-center space-x-3 border-b border-aux1/50 pb-3">
+              <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
+              <div>
+                <h2 class="text-lg sm:text-xl font-bold text-aux3 leading-tight">O projekcie InfoSkrót</h2>
+                <p class="text-[11px] text-aux2/60">Higiena cyfrowa, etyka AI i rzetelna prasówka w 2–3 minuty</p>
               </div>
-              <button 
-                (click)="isAboutModalOpen = false" 
-                class="close-about-btn text-aux2/60 hover:text-aux3 p-1.5 rounded-full hover:bg-aux1/50 transition-colors"
-                title="Zamknij">
-                <ng-icon name="lucideX" class="text-base"></ng-icon>
-              </button>
             </div>
 
-            <!-- Modal Content -->
-            <div class="space-y-4 text-xs sm:text-sm text-aux2 leading-relaxed">
+            <!-- Modal Content (kompaktowy układ bez potrzeby przewijania) -->
+            <div class="space-y-3 text-xs sm:text-[13px] text-aux2 leading-relaxed">
               <div>
-                <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
+                <h3 class="font-bold text-aux3 text-xs sm:text-sm mb-0.5 flex items-center gap-1.5">
                   <ng-icon name="lucideSparkles" class="text-primary text-xs"></ng-icon>
                   Czym jest InfoSkrót?
                 </h3>
                 <p class="text-aux2/80">
-                  Twój codzienny filtr na szum informacyjny. Otrzymujesz rzetelną, zwięzłą prasówkę w 2–3 minuty — bez sensacji, politycznej polaryzacji i clickbaitu. Zgodnie z ideą higieny cyfrowej skupiamy się wyłącznie na informacjach, minimalizując czynniki rozpraszające i dostarczając samo sedno najważniejszych wydarzeń.
+                  Twój codzienny filtr na szum informacyjny. Otrzymujesz rzetelną, zwięzłą prasówkę w 2–3 minuty — bez sensacji, politycznej polaryzacji i clickbaitu. Zgodnie z ideą higieny cyfrowej skupiamy się wyłącznie na faktach, minimalizując czynniki rozpraszające.
                 </p>
               </div>
 
               <div>
-                <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
+                <h3 class="font-bold text-aux3 text-xs sm:text-sm mb-1 flex items-center gap-1.5">
                   <ng-icon name="lucideLayers" class="text-primary text-xs"></ng-icon>
                   Trzy filary informacji
                 </h3>
-                <ul class="space-y-1.5 text-aux2/80 list-disc list-inside">
-                  <li><strong>Polska:</strong> Najważniejsze fakty gospodarcze, społeczne i prawne z kraju.</li>
-                  <li><strong>Świat:</strong> Kluczowe procesy geopolityczne, technologiczne i globalne.</li>
-                  <li><strong>Pozytywne:</strong> Konstruktywny filtr — przełomy w nauce, medycynie i ekologii jako przeciwwaga dla pesymizmu.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
-                  <ng-icon name="lucideGlobe" class="text-primary text-xs"></ng-icon>
-                  Transparentność, etyka AI i bezstronność
-                </h3>
-                <p class="text-aux2/80 mb-2">
-                  Porównujemy relacje z wielu niezależnych redakcji o zróżnicowanych profilach, wyciągając wyłącznie wspólny mianownik faktów. Modele sztucznej inteligencji syntetyzują same fakty, eliminując zbędne dygresje i sensacjonizm.
-                </p>
-                <div class="p-3 bg-aux1/30 rounded-2xl border border-aux1/60 text-xs text-aux2/90">
-                  <strong>Szacunek dla twórców:</strong> Za każdym artykułem stoi człowiek i praca dziennikarzy. Każde streszczenie zawiera wyraźną sekcję <em>Źródło</em> z bezpośrednim linkiem do publikacji wydawcy, umożliwiając pogłębioną lekturę u autorów.
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] sm:text-xs">
+                  <div class="bg-aux1/25 p-2 rounded-xl border border-aux1/50">
+                    <strong class="text-aux3">Polska:</strong> Fakty gospodarcze, społeczne i prawne.
+                  </div>
+                  <div class="bg-aux1/25 p-2 rounded-xl border border-aux1/50">
+                    <strong class="text-aux3">Świat:</strong> Geopolityka, technologia i wydarzenia globalne.
+                  </div>
+                  <div class="bg-aux1/25 p-2 rounded-xl border border-aux1/50">
+                    <strong class="text-aux3">Pozytywne:</strong> Nauka, medycyna, ekologia i dobre wieści.
+                  </div>
                 </div>
               </div>
 
               <div>
-                <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
-                  <ng-icon name="lucideSmartphone" class="text-primary text-xs"></ng-icon>
-                  Zabierz skrót ze sobą
+                <h3 class="font-bold text-aux3 text-xs sm:text-sm mb-0.5 flex items-center gap-1.5">
+                  <ng-icon name="lucideGlobe" class="text-primary text-xs"></ng-icon>
+                  Transparentność i szacunek dla twórców
                 </h3>
                 <p class="text-aux2/80">
-                  Korzystaj jak z wygodnej aplikacji — dodaj InfoSkrót do ekranu głównego smartfona lub komputera (PWA), by czytać wydania błyskawicznie, bez obciążania pamięci i bez instalowania zbędnych pakietów ze sklepów. Działa płynnie także offline.
+                  Porównujemy relacje z wielu niezależnych redakcji, wyciągając wspólny mianownik faktów. Za każdym artykułem stoi człowiek — każde streszczenie zawiera bezpośredni link do źródła, umożliwiając lekturę u oryginalnych autorów.
                 </p>
               </div>
 
-              <div class="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs text-aux2/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <p class="flex-1">
-                  <strong>Projekt w 100% niezależny i wolny od reklam.</strong> Jeśli cenisz swój zaoszczędzony czas, możesz postawić symboliczną kawę na rozwój i utrzymanie serwerów.
-                </p>
-                <app-buy-me-coffee-button></app-buy-me-coffee-button>
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-2.5 rounded-2xl bg-aux1/30 border border-aux1/60 text-[11px] sm:text-xs text-aux2/90">
+                <div class="flex items-center gap-2">
+                  <ng-icon name="lucideSmartphone" class="text-primary text-sm shrink-0"></ng-icon>
+                  <span><strong>Aplikacja PWA:</strong> Dodaj InfoSkrót do ekranu telefonu lub komputera, by czytać offline bez sklepów app store.</span>
+                </div>
+                <div class="shrink-0 flex items-center gap-2">
+                  <app-buy-me-coffee-button></app-buy-me-coffee-button>
+                </div>
               </div>
             </div>
 
             <!-- Modal Footer -->
-            <div class="pt-4 border-t border-aux1/50 flex justify-end">
+            <div class="pt-3 border-t border-aux1/50 flex justify-end">
               <button 
                 (click)="isAboutModalOpen = false" 
-                class="confirm-about-btn px-6 py-2.5 bg-aux3 hover:bg-black text-white rounded-xl text-xs sm:text-sm font-bold shadow-sm hover:shadow transition-all flex items-center gap-2">
-                <span>Przejdź do prasówki</span>
+                class="confirm-about-btn w-full sm:w-auto px-6 py-2 bg-aux3 hover:bg-black text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs hover:shadow transition-all flex items-center justify-center gap-2">
+                <span>Powrót do prasówki</span>
               </button>
             </div>
           </div>
