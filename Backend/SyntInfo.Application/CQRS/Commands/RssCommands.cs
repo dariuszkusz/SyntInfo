@@ -1,17 +1,16 @@
-namespace SyntInfo.Application.CQRS.Commands
-{
-    public record TriggerRssFetchCommand();
+namespace SyntInfo.Application.CQRS.Commands;
 
-    public record SummarizeArticleCommand(
-        string Title,
-        string Content,
-        string Url,
-        DateTime PublishedAt,
-        Guid SourceId,
-        Domain.Entities.SourceRegion Region,
-        List<string>? AdditionalUrls = null,
-        Guid? ExistingArticleId = null,
-        string? ImageUrl = null);
+public record TriggerRssFetchCommand();
 
-    public record ClearAllArticlesCommand();
-}
+public record SummarizeArticleCommand(
+    string Title,
+    string Content,
+    string Url,
+    DateTime PublishedAt,
+    Guid SourceId,
+    Domain.Entities.SourceRegion Region,
+    List<string>? AdditionalUrls = null,
+    Guid? ExistingArticleId = null,
+    string? ImageUrl = null);
+
+public record ClearAllArticlesCommand();

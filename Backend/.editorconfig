@@ -1,0 +1,8 @@
+root = true
+
+[*.cs]
+# IDE0005: Remove unnecessary using directives
+dotnet_diagnostic.IDE0005.severity = warning
+
+# C# 10 File-scoped namespaces (remove { } from namespace)
+csharp_style_namespace_declarations = file_scoped:warning

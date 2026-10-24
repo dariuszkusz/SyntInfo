@@ -1,5 +1,4 @@
 using SyntInfo.Application.Models.Social;
-using SyntInfo.Domain.Entities;
 
 namespace SyntInfo.Application.Interfaces;
 

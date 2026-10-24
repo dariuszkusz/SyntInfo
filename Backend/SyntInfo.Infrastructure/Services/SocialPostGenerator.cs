@@ -1,7 +1,4 @@
 using System.Text;
-using Microsoft.Extensions.Logging;
-using SyntInfo.Application.Interfaces;
-using SyntInfo.Domain.Entities;
 using SyntInfo.Infrastructure.Services.Newsletter;
 
 namespace SyntInfo.Infrastructure.Services;

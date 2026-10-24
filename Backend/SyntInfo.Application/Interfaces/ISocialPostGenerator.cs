@@ -1,5 +1,3 @@
-using SyntInfo.Domain.Entities;
-
 namespace SyntInfo.Application.Interfaces;
 
 public interface ISocialPostGenerator

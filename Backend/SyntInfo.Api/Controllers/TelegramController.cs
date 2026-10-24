@@ -1,14 +1,9 @@
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using SyntInfo.Application.CQRS.Commands;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Wolverine;
-
-using SyntInfo.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 
 namespace SyntInfo.Api.Controllers;

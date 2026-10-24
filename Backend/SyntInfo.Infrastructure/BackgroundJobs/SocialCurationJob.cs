@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Quartz;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine;

@@ -1,6 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using SyntInfo.Domain.Entities;
-
 namespace SyntInfo.Infrastructure.Persistence;
 
 public class AppDbContext : DbContext
@@ -17,7 +14,7 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        
+
         // Włączenie rozszerzenia pgvector
         modelBuilder.HasPostgresExtension("vector");
 
@@ -28,9 +25,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Title).IsRequired().HasMaxLength(255);
             entity.Property(e => e.SummaryText).IsRequired().HasMaxLength(5000); // Zapas na fallback z LLM
             entity.Property(e => e.ImageUrl).HasMaxLength(1000);
-            
+
             // Konfiguracja wektora (wymiar 1536 dla OpenAI text-embedding-3-small via OpenRouter)
-            entity.Property(e => e.Embedding).HasColumnType("vector(1536)"); 
+            entity.Property(e => e.Embedding).HasColumnType("vector(1536)");
 
             // Indeks kompozytowy dla częstych zapytań o aktywne i najświeższe artykuły
             entity.HasIndex(e => new { e.IsActive, e.PublishedAt });

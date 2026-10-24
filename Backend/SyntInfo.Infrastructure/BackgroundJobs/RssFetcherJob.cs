@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Quartz;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine;
@@ -20,7 +19,7 @@ public class RssFetcherJob : IJob
     public async Task Execute(IJobExecutionContext context)
     {
         _logger.LogInformation("Wyzwalanie procesów tła (RSS + Cleanup) {Time}", DateTime.UtcNow);
-        
+
         context.CancellationToken.ThrowIfCancellationRequested();
         // 1. Pobieranie nowych newsów
         await _bus.PublishAsync(new TriggerRssFetchCommand());

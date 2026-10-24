@@ -1,9 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using SyntInfo.Application.CQRS.Commands;
-using SyntInfo.Application.Interfaces;
-using SyntInfo.Domain.Entities;
-using SyntInfo.Domain.Interfaces;
 using Wolverine.Attributes;
 
 namespace SyntInfo.Application.CQRS.Handlers;
