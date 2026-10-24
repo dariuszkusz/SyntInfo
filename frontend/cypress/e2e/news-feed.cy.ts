@@ -292,7 +292,8 @@ describe('News Feed', () => {
       cy.contains('Polska:').should('be.visible');
       cy.contains('Świat:').should('be.visible');
       cy.contains('Pozytywne:').should('be.visible');
-      cy.contains('Szacunek dla dziennikarstwa:').should('be.visible');
+      cy.contains('Szacunek dla twórców:').should('be.visible');
+      cy.get('.confirm-about-btn').scrollIntoView().should('be.visible');
 
       // Zamknięcie przez X
       cy.get('.close-about-btn').click();
@@ -303,8 +304,8 @@ describe('News Feed', () => {
       cy.get('.about-footer-link').click();
       cy.get('.about-modal-container').should('be.visible');
 
-      // Zamknięcie przez "Rozumiem"
-      cy.get('.confirm-about-btn').click();
+      // Zamknięcie przez "Przejdź do prasówki"
+      cy.get('.confirm-about-btn').click({ force: true });
       cy.get('.about-modal-container').should('not.exist');
     });
   });

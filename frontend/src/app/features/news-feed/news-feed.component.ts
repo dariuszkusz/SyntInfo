@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { NewsStore } from '../../state/news.store';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
 import { flagPl } from '@ng-icons/flag-icons';
-import { lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles, lucideInfo } from '@ng-icons/lucide';
+import { lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles, lucideInfo, lucideSmartphone } from '@ng-icons/lucide';
 import { BuyMeCoffeeButtonComponent } from '../../shared/components/buy-me-coffee-button/buy-me-coffee-button.component';
 import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/newsletter-box.component';
 
@@ -11,7 +11,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
   selector: 'app-news-feed',
   standalone: true,
   imports: [CommonModule, NgIconComponent, BuyMeCoffeeButtonComponent, NewsletterBoxComponent],
-  providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles, lucideInfo })],
+  providers: [provideIcons({ flagPl, lucideGlobe, lucideLayers, lucideX, lucideFilter, lucideSmile, lucideExternalLink, lucideSparkles, lucideInfo, lucideSmartphone })],
   template: `
     <div class="flex flex-col min-h-screen bg-aux1 text-aux2 font-sans selection:bg-primary/30 overflow-x-hidden">
       <!-- Header -->
@@ -303,7 +303,7 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                 <img src="assets/favicon.ico" alt="InfoSkrót Logo" class="w-8 h-8 rounded" />
                 <div>
                   <h2 class="text-xl font-bold text-aux3">O projekcie InfoSkrót</h2>
-                  <p class="text-xs text-aux2/60">Misja, sekcje tematyczne i etyka AI</p>
+                  <p class="text-xs text-aux2/60">Higiena cyfrowa, etyka AI i rzetelna prasówka</p>
                 </div>
               </div>
               <button 
@@ -322,40 +322,50 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
                   Czym jest InfoSkrót?
                 </h3>
                 <p class="text-aux2/80">
-                  InfoSkrót to niezależny, nowoczesny agregator wiadomości. Naszym celem jest dostarczenie rzetelnej, zwięzłej prasówki w 2–3 minuty — bez szumu informacyjnego, sensacji, komentarzy politycznych i clickbaitu.
+                  Twój codzienny filtr na szum informacyjny. Otrzymujesz rzetelną, zwięzłą prasówkę w 2–3 minuty — bez sensacji, politycznej polaryzacji i clickbaitu. Zgodnie z ideą higieny cyfrowej skupiamy się wyłącznie na informacjach, minimalizując czynniki rozpraszające i dostarczając samo sedno najważniejszych wydarzeń.
                 </p>
               </div>
 
               <div>
                 <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
                   <ng-icon name="lucideLayers" class="text-primary text-xs"></ng-icon>
-                  Trzy główne sekcje
+                  Trzy filary informacji
                 </h3>
                 <ul class="space-y-1.5 text-aux2/80 list-disc list-inside">
-                  <li><strong>Polska:</strong> Najważniejsze wydarzenia gospodarcze, społeczne i prawne z kraju.</li>
+                  <li><strong>Polska:</strong> Najważniejsze fakty gospodarcze, społeczne i prawne z kraju.</li>
                   <li><strong>Świat:</strong> Kluczowe procesy geopolityczne, technologiczne i globalne.</li>
-                  <li><strong>Pozytywne:</strong> Starannie wyselekcjonowane, budujące wiadomości z nauki, medycyny i ekologii — konstruktywna przeciwwaga dla pesymizmu.</li>
+                  <li><strong>Pozytywne:</strong> Konstruktywny filtr — przełomy w nauce, medycynie i ekologii jako przeciwwaga dla pesymizmu.</li>
                 </ul>
               </div>
 
               <div>
                 <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
                   <ng-icon name="lucideGlobe" class="text-primary text-xs"></ng-icon>
-                  Jak powstają streszczenia i etyka źródeł?
+                  Transparentność, etyka AI i bezstronność
                 </h3>
                 <p class="text-aux2/80 mb-2">
-                  Treści są automatycznie agregowane z oficjalnych kanałów RSS wiodących redakcji prasowych. Modele sztucznej inteligencji syntetyzują same fakty, eliminując zbędne dygresje i clickbait.
+                  Porównujemy relacje z wielu niezależnych redakcji o zróżnicowanych profilach, wyciągając wyłącznie wspólny mianownik faktów. Modele sztucznej inteligencji syntetyzują same fakty, eliminując zbędne dygresje i sensacjonizm.
                 </p>
                 <div class="p-3 bg-aux1/30 rounded-2xl border border-aux1/60 text-xs text-aux2/90">
-                  <strong>Szacunek dla dziennikarstwa:</strong> InfoSkrót nie zastępuje oryginalnych artykułów. Każde streszczenie zawiera wyraźną sekcję <em>Źródło</em> z bezpośrednim linkiem do publikacji wydawcy, umożliwiając pogłębioną lekturę u autorów.
+                  <strong>Szacunek dla twórców:</strong> Za każdym artykułem stoi człowiek i praca dziennikarzy. Każde streszczenie zawiera wyraźną sekcję <em>Źródło</em> z bezpośrednim linkiem do publikacji wydawcy, umożliwiając pogłębioną lekturę u autorów.
                 </div>
               </div>
 
               <div>
-                <h3 class="font-bold text-aux3 text-sm mb-1">Aplikacja PWA</h3>
+                <h3 class="font-bold text-aux3 text-sm mb-1 flex items-center gap-1.5">
+                  <ng-icon name="lucideSmartphone" class="text-primary text-xs"></ng-icon>
+                  Zabierz skrót ze sobą
+                </h3>
                 <p class="text-aux2/80">
-                  InfoSkrót jest Progresywną Aplikacją Webową (PWA). Możesz zainstalować ją bezpośrednio na ekranie głównym swojego smartfona lub komputera, korzystając z błyskawicznego dostępu offline.
+                  Korzystaj jak z wygodnej aplikacji — dodaj InfoSkrót do ekranu głównego smartfona lub komputera (PWA), by czytać wydania błyskawicznie, bez obciążania pamięci i bez instalowania zbędnych pakietów ze sklepów. Działa płynnie także offline.
                 </p>
+              </div>
+
+              <div class="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs text-aux2/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <p class="flex-1">
+                  <strong>Projekt w 100% niezależny i wolny od reklam.</strong> Jeśli cenisz swój zaoszczędzony czas, możesz postawić symboliczną kawę na rozwój i utrzymanie serwerów.
+                </p>
+                <app-buy-me-coffee-button></app-buy-me-coffee-button>
               </div>
             </div>
 
@@ -363,8 +373,8 @@ import { NewsletterBoxComponent } from '../../shared/components/newsletter-box/n
             <div class="pt-4 border-t border-aux1/50 flex justify-end">
               <button 
                 (click)="isAboutModalOpen = false" 
-                class="confirm-about-btn px-5 py-2 bg-aux3 text-white rounded-xl text-xs font-bold hover:bg-aux3/90 transition-all">
-                Rozumiem
+                class="confirm-about-btn px-6 py-2.5 bg-aux3 hover:bg-black text-white rounded-xl text-xs sm:text-sm font-bold shadow-sm hover:shadow transition-all flex items-center gap-2">
+                <span>Przejdź do prasówki</span>
               </button>
             </div>
           </div>
