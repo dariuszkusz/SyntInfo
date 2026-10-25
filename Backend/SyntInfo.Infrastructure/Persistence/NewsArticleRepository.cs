@@ -28,7 +28,10 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
         return await _db.NewsArticles
             .Where(a => a.IsActive 
                      && a.SummaryText.Length >= 40 
-                     && !a.SummaryText.Contains("User Safety"))
+                     && !a.Title.Contains("Brak faktów")
+                     && !a.SummaryText.Contains("User Safety")
+                     && !a.SummaryText.Contains("Brak faktów")
+                     && !a.SummaryText.Contains("Nie podano danych"))
             .OrderByDescending(a => a.PublishedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -40,7 +43,10 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
             .Where(a => a.IsActive 
                      && a.DigestPublishedAt == null
                      && a.SummaryText.Length >= 40 
-                     && !a.SummaryText.Contains("User Safety"))
+                     && !a.Title.Contains("Brak faktów")
+                     && !a.SummaryText.Contains("User Safety")
+                     && !a.SummaryText.Contains("Brak faktów")
+                     && !a.SummaryText.Contains("Nie podano danych"))
             .OrderByDescending(a => a.PublishedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -54,8 +60,12 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
             .Where(a => a.IsActive 
                      && a.PublishedAt >= cutoffDate
                      && a.SummaryText.Length >= 40
+                     && !a.Title.Contains("Brak faktów")
+                     && !a.Title.Contains("Brak danych")
                      && !a.SummaryText.Contains("User Safety")
-                     && !a.SummaryText.Contains("safety filter"));
+                     && !a.SummaryText.Contains("safety filter")
+                     && !a.SummaryText.Contains("Brak faktów")
+                     && !a.SummaryText.Contains("Nie podano danych"));
 
         if (region.HasValue)
         {

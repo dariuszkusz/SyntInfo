@@ -26,7 +26,7 @@ public class SummarizeArticleCommandHandlerTests
         _searchService.SearchDetailedWithImageAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new SearchResultInfo { Content = "Search content", ImageUrl = "https://example.com/img.jpg" });
         _googleAiStudioClient.GenerateFactsAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns("{\"facts\": [\"Fakt 1\"]}");
+            .Returns("[{\"fact\": \"Ważny fakt o odkryciu naukowym\", \"source\": \"Nauka\"}]");
     }
 
     private SummarizeArticleCommandHandler CreateHandler()
@@ -96,5 +96,59 @@ public class SummarizeArticleCommandHandlerTests
             a.Title == "Skrócony tytuł" &&
             a.SummaryText.Contains("rzetelne i wartościowe")), Arg.Any<CancellationToken>());
         await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenFactsAreEmptyOrInsufficient_DoesNotInvokeEditorNorSaveArticle()
+    {
+        // Arrange
+        var command = new SummarizeArticleCommand(
+            Title: "Artykuł bez treści",
+            Content: "",
+            Url: "https://example.com/empty",
+            PublishedAt: DateTime.UtcNow,
+            SourceId: Guid.NewGuid(),
+            Region: SourceRegion.Poland
+        );
+
+        _googleAiStudioClient.GenerateFactsAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("[]");
+
+        var handler = CreateHandler();
+
+        // Act
+        await handler.Handle(command, CancellationToken.None);
+
+        // Assert - Redaktor nie został wywołany, artykuł nie został zapisany
+        await _googleAiStudioClient.DidNotReceive().GenerateSummaryFromFactsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _newsArticleRepo.DidNotReceive().AddAsync(Arg.Any<NewsArticle>(), Arg.Any<CancellationToken>());
+        await _uow.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenEditorReturnsNoFactsTitle_DoesNotSaveArticle()
+    {
+        // Arrange
+        var command = new SummarizeArticleCommand(
+            Title: "Bloomberg News",
+            Content: "Nagłówek",
+            Url: "https://bloomberg.com/news/1",
+            PublishedAt: DateTime.UtcNow,
+            SourceId: Guid.NewGuid(),
+            Region: SourceRegion.Poland
+        );
+
+        var noFactsJson = "{\"title\": \"Brak faktów do podsumowania\", \"essence\": \"Nie podano danych do stworzenia infopigułki. Proszę dostarcz listę faktów, aby wygenerować treść.\", \"category\": \"PL\"}";
+        _googleAiStudioClient.GenerateSummaryFromFactsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(noFactsJson);
+
+        var handler = CreateHandler();
+
+        // Act
+        await handler.Handle(command, CancellationToken.None);
+
+        // Assert - artykuł z tytułem o braku faktów NIE został zapisany
+        await _newsArticleRepo.DidNotReceive().AddAsync(Arg.Any<NewsArticle>(), Arg.Any<CancellationToken>());
+        await _uow.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }
