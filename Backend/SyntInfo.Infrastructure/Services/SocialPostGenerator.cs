@@ -93,7 +93,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 sb.AppendLine();
                 sb.AppendLine("Więcej wiadomości i pełne archiwum: [www.infoskrót.pl](https://www.infoskrót.pl)");
                 sb.AppendLine();
-                sb.AppendLine("#wiadomosci #infoskrot #polska #swiat");
+                sb.AppendLine("#wiadomosci #infoskrot #polska #swiat #polityka");
                 break;
 
             case SocialPlatformType.Wykop:
@@ -162,7 +162,7 @@ public class SocialPostGenerator : ISocialPostGenerator
 
             SocialPlatformType.Hejto =>
                 $"Napisz angażujący wpis na portal Hejto.pl (maksymalnie 500 znaków) z formatowaniem Markdown na podstawie: {article.Title}. " +
-                $"Przedstaw esencję newsa, link: {primaryUrl} i tagi: #wiadomosci #{categoryTag} #infoskrot #polska. Zwróć tylko treść.",
+                $"Przedstaw esencję newsa, link: {primaryUrl} i tagi: #wiadomosci #{categoryTag} #infoskrot #polska #polityka. Zwróć tylko treść.",
 
             SocialPlatformType.Facebook =>
                 $"Napisz profesjonalny, angażujący post na Fanpage Facebook (około 400-600 znaków) z emotikonami o: {article.Title}. " +
@@ -231,7 +231,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 sb.AppendLine();
                 sb.AppendLine($"[Źródło artykułu]({primaryUrl})");
                 sb.AppendLine();
-                sb.AppendLine($"#wiadomosci #{categoryTag} #infoskrot");
+                sb.AppendLine($"#wiadomosci #{categoryTag} #infoskrot #polityka");
                 break;
 
             case SocialPlatformType.Facebook:

@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using Microsoft.Extensions.Configuration;
 using SyntInfo.Application.Models.Llm;
 using SyntInfo.Application.Prompts;
 
@@ -11,11 +10,11 @@ public class LocalLlmClient : ILlmClient
     private readonly string _modelName;
     private readonly bool _useMock;
 
-    public LocalLlmClient(HttpClient httpClient, IConfiguration configuration)
+    public LocalLlmClient(HttpClient httpClient, IOptions<LocalLlmOptions> localLlmOptions)
     {
         _httpClient = httpClient;
-        _modelName = configuration["Llm:ModelName"] ?? "ai/llama3.2:latest";
-        _useMock = configuration.GetValue<bool>("Llm:UseMock");
+        _modelName = !string.IsNullOrWhiteSpace(localLlmOptions.Value.ModelName) ? localLlmOptions.Value.ModelName : "ai/llama3.2:latest";
+        _useMock = localLlmOptions.Value.UseMock;
     }
     public async Task<string> GenerateSummaryAsync(string text, CancellationToken cancellationToken = default)
     {

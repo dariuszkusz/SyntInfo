@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using Microsoft.Extensions.Configuration;
 using SyntInfo.Application.Models.Tavily;
 
 namespace SyntInfo.Infrastructure.Services;
@@ -12,11 +11,11 @@ public class TavilyNewsDiscoveryService : INewsDiscoveryService
 
     public TavilyNewsDiscoveryService(
         HttpClient httpClient,
-        IConfiguration configuration,
+        IOptions<TavilyOptions> tavilyOptions,
         ILogger<TavilyNewsDiscoveryService> logger)
     {
         _httpClient = httpClient;
-        _apiKey = configuration["Search:TavilyApiKey"] ?? string.Empty;
+        _apiKey = tavilyOptions.Value.TavilyApiKey;
         _logger = logger;
     }
 

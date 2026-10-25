@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine.Attributes;
 
@@ -15,24 +14,18 @@ public static class PublishDigestIssueCommandHandler
         IHejtoClient hejtoClient,
         IMailerLiteClient mailerLiteClient,
         ITelegramNotificationService telegramService,
-        Microsoft.Extensions.Configuration.IConfiguration configuration,
+        IOptions<CurationOptions> curationOptions,
+        IOptions<MailerLiteOptions> mailerLiteOptions,
         ILogger<PublishDigestIssueCommand> logger,
         CancellationToken cancellationToken)
     {
         logger.LogInformation("Rozpoczęto generowanie i publikację zbiorczego wydania InfoSkrót.");
 
-        var selectedArticles = await uow.Repository<NewsArticle>().Query()
-            .Where(a => a.IsSelectedForDigest && a.DigestPublishedAt == null)
-            .OrderByDescending(a => a.PublishedAt)
-            .ToListAsync(cancellationToken);
+        var selectedArticles = await uow.NewsArticles.GetSelectedForDigestAsync(cancellationToken);
 
         if (!selectedArticles.Any())
         {
-            selectedArticles = await uow.Repository<NewsArticle>().Query()
-                .Where(a => a.IsActive)
-                .OrderByDescending(a => a.PublishedAt)
-                .Take(4)
-                .ToListAsync(cancellationToken);
+            selectedArticles = await uow.NewsArticles.GetActiveArticlesAsync(curationOptions.Value.MaxArticlesPerRun, cancellationToken);
         }
 
         if (!selectedArticles.Any())
@@ -88,7 +81,7 @@ public static class PublishDigestIssueCommandHandler
         }
 
         // 3. Publikacja Newslettera (MailerLite)
-        var isNewsletterEnabled = bool.TryParse(configuration["SocialPlatforms:MailerLite:Enabled"], out var isEnabled) && isEnabled;
+        var isNewsletterEnabled = mailerLiteOptions.Value.Enabled;
         if (isNewsletterEnabled)
         {
             try
@@ -116,7 +109,7 @@ public static class PublishDigestIssueCommandHandler
         {
             article.DigestPublishedAt = DateTime.UtcNow;
             article.IsSelectedForDigest = false;
-            uow.Repository<NewsArticle>().Update(article);
+            uow.NewsArticles.Update(article);
         }
         await uow.SaveChangesAsync(cancellationToken);
 

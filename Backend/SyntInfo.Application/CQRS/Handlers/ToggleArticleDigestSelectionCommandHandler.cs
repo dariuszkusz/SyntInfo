@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine.Attributes;
 
@@ -14,8 +13,7 @@ public static class ToggleArticleDigestSelectionCommandHandler
         ILogger<ToggleArticleDigestSelectionCommand> logger,
         CancellationToken cancellationToken)
     {
-        var article = await uow.Repository<NewsArticle>().Query()
-            .FirstOrDefaultAsync(a => a.Id == command.ArticleId, cancellationToken);
+        var article = await uow.NewsArticles.GetByIdAsync(command.ArticleId, cancellationToken);
 
         if (article == null)
         {
@@ -24,7 +22,7 @@ public static class ToggleArticleDigestSelectionCommandHandler
         }
 
         article.IsSelectedForDigest = !article.IsSelectedForDigest;
-        uow.Repository<NewsArticle>().Update(article);
+        uow.NewsArticles.Update(article);
         await uow.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Przełączono status artykułu {ArticleId} '{Title}' w wydaniu na: {Selected}",

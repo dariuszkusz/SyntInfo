@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 using SyntInfo.Application.Models.Llm;
 using SyntInfo.Application.Prompts;
@@ -21,17 +20,18 @@ public class OpenRouterClient : IOpenRouterClient
     private static DateTime _lastRequestTime = DateTime.MinValue;
     private const int MinIntervalMs = 12000; // Increased to 12 seconds (~5 RPM) for better stability
 
-    public OpenRouterClient(HttpClient httpClient, IConfiguration configuration, ILogger<OpenRouterClient> logger)
+    public OpenRouterClient(HttpClient httpClient, IOptions<OpenRouterOptions> openRouterOptions, ILogger<OpenRouterClient> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
-        _apiKey = configuration["OpenRouter:ApiKey"] ?? string.Empty;
-        _analystModel = configuration["OpenRouter:AnalystModel"] ?? "qwen/qwen-2.5-72b-instruct:free";
-        _editorModel = configuration["OpenRouter:EditorModel"] ?? "mistralai/mistral-small-24b-instruct-2501:free";
-        _fallbackModel = configuration["OpenRouter:FallbackModel"] ?? "google/gemini-2.0-flash-lite-preview-02-05:free";
-        _embeddingModel = configuration["OpenRouter:EmbeddingModel"] ?? "openai/text-embedding-3-small";
+        var options = openRouterOptions.Value;
+        _apiKey = options.ApiKey;
+        _analystModel = !string.IsNullOrWhiteSpace(options.AnalystModel) ? options.AnalystModel : "google/gemma-4-31b-it:free";
+        _editorModel = !string.IsNullOrWhiteSpace(options.EditorModel) ? options.EditorModel : "meta-llama/llama-4-maverick:free";
+        _fallbackModel = !string.IsNullOrWhiteSpace(options.FallbackModel) ? options.FallbackModel : "openrouter/free";
+        _embeddingModel = !string.IsNullOrWhiteSpace(options.EmbeddingModel) ? options.EmbeddingModel : "openai/text-embedding-3-small";
 
-        var baseUrl = configuration["OpenRouter:BaseUrl"] ?? "https://openrouter.ai/api/v1/";
+        var baseUrl = options.BaseUrl;
         if (!baseUrl.EndsWith("/")) baseUrl += "/";
         _httpClient.BaseAddress = new Uri(baseUrl);
 
@@ -101,10 +101,9 @@ public class OpenRouterClient : IOpenRouterClient
             {
                 var response = await CallOpenRouterAsync(currentModel, systemPrompt, userPrompt, forceJson, cancellationToken);
 
-                // Validacja JSON jesli wymuszony
-                if (forceJson && string.IsNullOrWhiteSpace(response))
+                if (forceJson)
                 {
-                    throw new Exception("Empty response from LLM when JSON was expected.");
+                    ValidateJsonResponse(response);
                 }
 
                 return response;
@@ -305,5 +304,20 @@ public class OpenRouterClient : IOpenRouterClient
             _logger.LogInformation("[Rate Limit] Remaining: {Remaining}", remaining.FirstOrDefault());
         if (headers.TryGetValues("X-RateLimit-Reset", out var reset))
             _logger.LogInformation("[Rate Limit] Reset: {Reset}", reset.FirstOrDefault());
+    }
+
+    private static void ValidateJsonResponse(string response)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            throw new Exception("Empty response from LLM when JSON was expected.");
+        }
+
+        var trimmed = response.Trim();
+        if (!trimmed.StartsWith("{") && !trimmed.StartsWith("["))
+        {
+            var snippet = trimmed.Length > 60 ? trimmed[..60] : trimmed;
+            throw new Exception($"Invalid JSON response from LLM (received non-JSON text: '{snippet}...')");
+        }
     }
 }

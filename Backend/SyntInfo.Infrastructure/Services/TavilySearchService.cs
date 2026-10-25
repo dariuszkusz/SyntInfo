@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using Microsoft.Extensions.Configuration;
 using SyntInfo.Application.Models.Tavily;
 
 namespace SyntInfo.Infrastructure.Services;
@@ -10,10 +9,10 @@ public class TavilySearchService : ISearchService
     private readonly string _apiKey;
     private readonly ILogger<TavilySearchService> _logger;
 
-    public TavilySearchService(HttpClient httpClient, IConfiguration configuration, ILogger<TavilySearchService> logger)
+    public TavilySearchService(HttpClient httpClient, IOptions<TavilyOptions> tavilyOptions, ILogger<TavilySearchService> logger)
     {
         _httpClient = httpClient;
-        _apiKey = configuration["Search:TavilyApiKey"] ?? string.Empty;
+        _apiKey = tavilyOptions.Value.TavilyApiKey;
         _logger = logger;
     }
 

@@ -2,8 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using CodeHollow.FeedReader;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine;
-using Microsoft.Extensions.Options;
-using SyntInfo.Application.Options;
 using System.Text.Json;
 using Wolverine.Attributes;
 using Pgvector.EntityFrameworkCore;

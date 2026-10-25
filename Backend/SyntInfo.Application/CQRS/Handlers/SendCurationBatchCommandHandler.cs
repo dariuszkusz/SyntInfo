@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using SyntInfo.Application.CQRS.Commands;
 
 namespace SyntInfo.Application.CQRS.Handlers;
@@ -12,16 +11,12 @@ public static class SendCurationBatchCommandHandler
         SendCurationBatchCommand command,
         IUnitOfWork uow,
         ITelegramNotificationService telegramService,
-        ILogger<SendCurationBatchCommand> logger,
+        IOptions<CurationOptions> curationOptions,
         CancellationToken cancellationToken)
     {
-        var count = command.Count > 0 ? command.Count : 5;
+        var count = command.Count is > 0 ? command.Count.Value : curationOptions.Value.MaxArticlesPerRun;
 
-        var articles = await uow.Repository<NewsArticle>().Query()
-            .Where(a => a.IsActive && a.DigestPublishedAt == null)
-            .OrderByDescending(a => a.PublishedAt)
-            .Take(count)
-            .ToListAsync(cancellationToken);
+        var articles = await uow.NewsArticles.GetArticlesForCurationAsync(count, cancellationToken);
 
         if (!articles.Any())
         {

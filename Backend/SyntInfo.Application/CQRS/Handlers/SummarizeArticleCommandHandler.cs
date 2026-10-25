@@ -45,8 +45,20 @@ public class SummarizeArticleCommandHandler
             var searchResult = await _searchService.SearchDetailedWithImageAsync(command.Title, safeToken);
             var factsJson = await GenerateFactsAsync(command.Content, searchResult.Content, safeToken);
 
+            if (!HasValidFacts(factsJson))
+            {
+                _logger.LogWarning("Odrzucono artykuł '{Title}' ze względu na brak poprawnych faktów wyekstrahowanych przez Analityka AI.", command.Title);
+                return;
+            }
+
             // 2. Wygenerowanie streszczenia przez Redaktora AI
             var (displayTitle, essence, categoryName) = await GenerateSummaryAsync(factsJson, command.Title, safeToken);
+
+            if (!IsValidSummary(displayTitle, essence))
+            {
+                _logger.LogWarning("Odrzucono artykuł '{Title}' ze względu na nieprawidłowe streszczenie lub artefakt filtru bezpieczeństwa: '{Essence}'", command.Title, essence);
+                return;
+            }
 
             // 3. Rozstrzygnięcie zdjęcia oraz embeddingi wektorowe
             var imageUrl = await ResolveImageUrlAsync(command, searchResult.ImageUrl, safeToken);
@@ -94,11 +106,11 @@ public class SummarizeArticleCommandHandler
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var structuredContent = JsonSerializer.Deserialize<InfopigulaContent>(editorJson, options);
 
-            if (structuredContent != null && !string.IsNullOrWhiteSpace(structuredContent.Title))
+            if (structuredContent != null && !string.IsNullOrWhiteSpace(structuredContent.Title) && !string.IsNullOrWhiteSpace(structuredContent.Essence))
             {
                 return (
                     structuredContent.Title.Trim(),
-                    structuredContent.Essence?.Trim() ?? string.Empty,
+                    structuredContent.Essence.Trim(),
                     structuredContent.Category?.Trim() ?? "General"
                 );
             }
@@ -108,8 +120,77 @@ public class SummarizeArticleCommandHandler
             _logger.LogWarning(ex, "Błąd parsowania JSON z Redaktora. Raw: {Raw}", editorResponseRaw);
         }
 
-        var fallbackEssence = editorJson.Length > 4500 ? editorJson.Substring(0, 4500) : editorJson;
-        return (fallbackTitle, fallbackEssence.Trim(), "General");
+        // Nigdy nie używamy surowego tekstu błędu lub moderacji jako treści podsumowania
+        return (fallbackTitle, string.Empty, "General");
+    }
+
+    private static bool IsValidSummary(string title, string essence)
+    {
+        if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(essence))
+        {
+            return false;
+        }
+
+        // Prawdziwe podsumowanie newsa musi mieć minimalną długość (odrzucamy kilkunastoznakowe błędy i filtry)
+        if (essence.Length < 40)
+        {
+            return false;
+        }
+
+        var lowerTitle = title.ToLowerInvariant();
+        if (lowerTitle.Contains("brak faktów") ||
+            lowerTitle.Contains("brak danych") ||
+            lowerTitle.Contains("nie podano danych") ||
+            lowerTitle.Contains("user safety"))
+        {
+            return false;
+        }
+
+        // Odrzucenie komunikatów filtrów moderacyjnych i technicznych artefaktów modeli LLM
+        var lower = essence.ToLowerInvariant();
+        if (lower.Contains("user safety") ||
+            lower.Contains("safety filter") ||
+            lower.Contains("as an ai") ||
+            lower.Contains("as a language model") ||
+            lower.Contains("i cannot fulfill") ||
+            lower.Contains("i am sorry, but") ||
+            lower.Contains("brak faktów") ||
+            lower.Contains("brak danych") ||
+            lower.Contains("nie podano danych") ||
+            lower.Contains("brak wystarczających danych") ||
+            lower.Contains("proszę dostarcz") ||
+            lower.Contains("proszę o dostarczenie"))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool HasValidFacts(string? factsJson)
+    {
+        if (string.IsNullOrWhiteSpace(factsJson))
+        {
+            return false;
+        }
+
+        var trimmed = factsJson.Trim();
+        // Puste tablice JSON '[]' lub obiekty '{}' lub brak treści
+        if (trimmed.Length < 10 || trimmed == "[]" || trimmed == "{}")
+        {
+            return false;
+        }
+
+        var lower = trimmed.ToLowerInvariant();
+        if (lower.Contains("brak faktów") ||
+            lower.Contains("brak danych") ||
+            lower.Contains("user safety") ||
+            lower.Contains("nie podano"))
+        {
+            return false;
+        }
+
+        return trimmed.StartsWith("[") || trimmed.StartsWith("{");
     }
 
     private async Task<string?> ResolveImageUrlAsync(
