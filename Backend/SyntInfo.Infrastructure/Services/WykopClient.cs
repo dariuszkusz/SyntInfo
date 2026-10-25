@@ -11,6 +11,7 @@ public class WykopClient : IWykopClient
     private const string AppTokenCacheKey = "wykop_app_oauth_token";
     private const string UserTokenCacheKey = "wykop_user_oauth_token";
     private const string RefreshTokenCacheKey = "wykop_user_refresh_token";
+    private static readonly SemaphoreSlim _fileLock = new(1, 1);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _memoryCache;
@@ -64,15 +65,10 @@ public class WykopClient : IWykopClient
     private static string GetTokenFilePath()
     {
         var logsPath = Path.Combine(AppContext.BaseDirectory, "logs", "wykop_tokens.json");
-        if (File.Exists(logsPath)) return logsPath;
-
         var basePath = Path.Combine(AppContext.BaseDirectory, "wykop_tokens.json");
-        if (File.Exists(basePath)) return basePath;
 
-        var logsDir = Path.Combine(AppContext.BaseDirectory, "logs");
-        if (Directory.Exists(logsDir)) return logsPath;
-
-        return basePath;
+        // Jeśli plik istnieje w głównym katalogu (dla wstecznej kompatybilności), użyj go, w przeciwnym razie wybierz logs/
+        return File.Exists(basePath) ? basePath : logsPath;
     }
 
     private async Task<WykopTokenData?> ReadTokenFileAsync(CancellationToken cancellationToken)
@@ -83,8 +79,14 @@ public class WykopClient : IWykopClient
             return null;
         }
 
+        await _fileLock.WaitAsync(cancellationToken);
         try
         {
+            if (!File.Exists(tokenPath))
+            {
+                return null;
+            }
+
             var fileContent = await File.ReadAllTextAsync(tokenPath, cancellationToken);
             return JsonSerializer.Deserialize<WykopTokenData>(fileContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
@@ -92,6 +94,10 @@ public class WykopClient : IWykopClient
         {
             _logger.LogWarning(ex, "Błąd odczytu tokenów Wykop z pliku {Path}", tokenPath);
             return null;
+        }
+        finally
+        {
+            _fileLock.Release();
         }
     }
 
@@ -111,6 +117,7 @@ public class WykopClient : IWykopClient
         }
 
         var tokenPath = GetTokenFilePath();
+        await _fileLock.WaitAsync(cancellationToken);
         try
         {
             var dir = Path.GetDirectoryName(tokenPath);
@@ -132,6 +139,10 @@ public class WykopClient : IWykopClient
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Nie udało się zapisać tokenów Wykop do pliku {Path}", tokenPath);
+        }
+        finally
+        {
+            _fileLock.Release();
         }
 
         _logger.LogInformation("Zapisano token użytkownika Wykop w pamięci podręcznej.");
