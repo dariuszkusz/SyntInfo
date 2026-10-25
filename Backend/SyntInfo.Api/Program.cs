@@ -1,12 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using Quartz;
 using Serilog;
 using SyntInfo.Infrastructure.Persistence;
-using SyntInfo.Domain.Interfaces;
 using Wolverine;
 using Scalar.AspNetCore;
-using SyntInfo.Api.Extensions;
-using SyntInfo.Application.Options;
 
 
 try
@@ -32,10 +28,8 @@ try
 
         // Wyciszenie ostrzeżeń o Service Location dla typów rejestrowanych za pomocą fabryk lambda
         opts.CodeGeneration.AlwaysUseServiceLocationFor<AppDbContext>();
-        opts.CodeGeneration.AlwaysUseServiceLocationFor<Microsoft.EntityFrameworkCore.DbContextOptions<AppDbContext>>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<DbContextOptions<AppDbContext>>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IUnitOfWork>();
-        opts.CodeGeneration.AlwaysUseServiceLocationFor<INewsSourceRepository>();
-        opts.CodeGeneration.AlwaysUseServiceLocationFor<INewsArticleRepository>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IRssFeedClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IWebMetadataExtractor>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IOpenRouterClient>();
@@ -47,12 +41,14 @@ try
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IWykopClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHejtoClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IMailerLiteClient>();
-        opts.CodeGeneration.AlwaysUseServiceLocationFor<Microsoft.Extensions.Options.IOptions<ProcessingOptions>>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<ProcessingOptions>>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<CurationOptions>>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<MailerLiteOptions>>();
     });
 
 
     // Add services to the container.
-    builder.Services.Configure<ProcessingOptions>(builder.Configuration.GetSection(ProcessingOptions.SectionName));
+    builder.Services.AddConfiguredOptions<IConfigurableOptions>(builder.Configuration);
 
     // PWA API: Baza Danych PostgreSQL z rozszerzeniem pgvector
     builder.Services.AddDbContext<AppDbContext>(options =>
@@ -68,13 +64,11 @@ try
     // Konfiguracja Swagger / OpenAPI, Uwierzytelniania, CORS i Telegram Bot Client za pomocą metod rozszerzających
     builder.Services.AddSwaggerDocumentation();
     builder.Services.AddAdminAuthentication();
-    builder.Services.AddCorsPolicy(builder.Configuration);
+    var appOptions = builder.Configuration.Get<AppOptions>() ?? new AppOptions();
+    builder.Services.AddCorsPolicy(appOptions);
     builder.Services.AddTelegramBotClient();
 
-    // Rejestracja CQRS i UnitOfWork (Usunięto customowy dyspozytor na rzecz Wolverine)
-    builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-    builder.Services.AddScoped<INewsSourceRepository>(sp => sp.GetRequiredService<IUnitOfWork>().NewsSources);
-    builder.Services.AddScoped<INewsArticleRepository>(sp => sp.GetRequiredService<IUnitOfWork>().NewsArticles);
+
     builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.TavilySearchService>(client =>
     {
         client.Timeout = TimeSpan.FromMinutes(10);
@@ -105,69 +99,13 @@ try
     // Pamięć podręczna (dla tokenów OAuth2 Hejto itp.)
     builder.Services.AddMemoryCache();
 
-    // Rejestracja modułu automatyzacji Social Media & Telegram
-    builder.Services.AddHttpClient("WykopClient", client =>
-    {
-        client.Timeout = TimeSpan.FromSeconds(30);
-    });
-    builder.Services.AddHttpClient("HejtoClient", client =>
-    {
-        client.Timeout = TimeSpan.FromSeconds(30);
-    });
-    builder.Services.AddHttpClient("FacebookClient", client =>
-    {
-        client.Timeout = TimeSpan.FromSeconds(30);
-    });
-    builder.Services.AddHttpClient("MailerLiteClient", client =>
-    {
-        client.Timeout = TimeSpan.FromSeconds(30);
-    });
+    // Rejestracja modułu automatyzacji Social Media & Telegram (klienci HTTP na podstawie IHttpClientOptions)
+    builder.Services.AddConfiguredHttpClients<IConfigurableOptions>();
 
-    builder.Services.AddScoped<IWykopClient, SyntInfo.Infrastructure.Services.WykopClient>();
-    builder.Services.AddScoped<IHejtoClient, SyntInfo.Infrastructure.Services.HejtoClient>();
-    builder.Services.AddScoped<IFacebookClient, SyntInfo.Infrastructure.Services.FacebookClient>();
-    builder.Services.AddScoped<IMailerLiteClient, SyntInfo.Infrastructure.Services.MailerLiteClient>();
-
-    builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.WykopPublisher>();
-    builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.HejtoPublisher>();
-    builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.FacebookPublisher>();
-    builder.Services.AddScoped<ISocialPlatformPublisher, SyntInfo.Infrastructure.Services.Publishers.NewsletterPublisher>();
-    builder.Services.AddScoped<ISocialPostGenerator, SyntInfo.Infrastructure.Services.SocialPostGenerator>();
-    builder.Services.AddScoped<ITelegramNotificationService, SyntInfo.Infrastructure.Services.TelegramNotificationService>();
-    builder.Services.AddScoped<ISocialPublisherFactory, SyntInfo.Infrastructure.Services.SocialPublisherFactory>();
+    builder.Services.AddInfrastructureServices();
 
     // Konfiguracja zadań w tle (Quartz)
-    builder.Services.AddQuartz(q =>
-    {
-        var jobKey = new JobKey("RssFetcherJob");
-        q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.RssFetcherJob>(opts => opts.WithIdentity(jobKey));
-
-        TimeZoneInfo warsawTimeZone;
-        try
-        {
-            warsawTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            warsawTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
-        }
-
-        // Odpalanie 2 razy dziennie (7:00 i 19:00 czasu polskiego)
-        q.AddTrigger(opts => opts
-            .ForJob(jobKey)
-            .WithIdentity("RssFetcherJob-trigger")
-            .WithCronSchedule("0 0 7,19 * * ?", x => x.InTimeZone(warsawTimeZone)));
-
-        // Odpalanie publikacji/selekcji na platformy społecznościowe raz dziennie o 8:00 (czasu polskiego)
-        var socialJobKey = new JobKey("SocialCurationJob");
-        q.AddJob<SyntInfo.Infrastructure.BackgroundJobs.SocialCurationJob>(opts => opts.WithIdentity(socialJobKey));
-
-        q.AddTrigger(opts => opts
-            .ForJob(socialJobKey)
-            .WithIdentity("SocialCurationJob-trigger")
-            .WithCronSchedule("0 0 8 * * ?", x => x.InTimeZone(warsawTimeZone)));
-    });
-    builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
+    builder.Services.AddQuartzBackgroundJobs();
 
     var app = builder.Build();
 

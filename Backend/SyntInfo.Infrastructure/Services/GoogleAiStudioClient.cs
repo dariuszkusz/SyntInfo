@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using SyntInfo.Application.Prompts;
 
 namespace SyntInfo.Infrastructure.Services;
@@ -14,13 +13,13 @@ public class GoogleAiStudioClient : IGoogleAiStudioClient
     private readonly string _modelName;
     private readonly string _baseUrl = "https://generativelanguage.googleapis.com/v1beta/models";
 
-    public GoogleAiStudioClient(HttpClient httpClient, IOpenRouterClient openRouterClient, IConfiguration configuration, ILogger<GoogleAiStudioClient> logger)
+    public GoogleAiStudioClient(HttpClient httpClient, IOpenRouterClient openRouterClient, IOptions<GoogleAiStudioOptions> googleAiStudioOptions, ILogger<GoogleAiStudioClient> logger)
     {
         _httpClient = httpClient;
         _openRouterClient = openRouterClient;
         _logger = logger;
-        _apiKey = configuration["GoogleAiStudio:ApiKey"] ?? string.Empty;
-        _modelName = configuration["GoogleAiStudio:Model"] ?? "gemini-2.5-flash";
+        _apiKey = googleAiStudioOptions.Value.ApiKey;
+        _modelName = !string.IsNullOrWhiteSpace(googleAiStudioOptions.Value.Model) ? googleAiStudioOptions.Value.Model : "gemini-2.5-flash";
     }
 
     public async Task<List<int>> SelectTopArticlesIndexesAsync(string articlesListJson, int expectedCount, Domain.Entities.SourceRegion region, CancellationToken cancellationToken = default)

@@ -1,10 +1,10 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using SyntInfo.Application.CQRS.Commands;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Wolverine;
-using Microsoft.AspNetCore.Authorization;
 
 namespace SyntInfo.Api.Controllers;
 
@@ -15,20 +15,20 @@ public class TelegramController : ControllerBase
 {
     private readonly IMessageBus _bus;
     private readonly ITelegramBotClient _botClient;
-    private readonly IConfiguration _configuration;
+    private readonly TelegramOptions _telegramOptions;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<TelegramController> _logger;
 
     public TelegramController(
         IMessageBus bus,
         ITelegramBotClient botClient,
-        IConfiguration configuration,
+        IOptions<TelegramOptions> telegramOptions,
         IWebHostEnvironment env,
         ILogger<TelegramController> logger)
     {
         _bus = bus;
         _botClient = botClient;
-        _configuration = configuration;
+        _telegramOptions = telegramOptions.Value;
         _env = env;
         _logger = logger;
     }
@@ -38,7 +38,7 @@ public class TelegramController : ControllerBase
     public async Task<IActionResult> HandleWebhook([FromBody] JsonElement rawUpdate, CancellationToken cancellationToken)
     {
         // Weryfikacja nagłówka Secret Token (wymuszana w Production/Staging, opcjonalna w Dev jeśli brak konfiguracji)
-        var expectedSecret = _configuration["Telegram:SecretToken"];
+        var expectedSecret = _telegramOptions.SecretToken;
         var isSecretConfigured = !string.IsNullOrWhiteSpace(expectedSecret) && !expectedSecret.Contains("PLACEHOLDER");
 
         if (_env.IsProduction() || _env.IsStaging() || isSecretConfigured)
@@ -81,7 +81,7 @@ public class TelegramController : ControllerBase
             _logger.LogInformation("Odebrano CallbackQuery z Telegrama: Data='{Data}', From='{User}'", data, callback.From.Username);
 
             // Odpowiedz botowi na Telegramie, aby zdjąć stan ładowania przycisku
-            if (!_configuration.GetValue("Telegram:UseMock", false))
+            if (!_telegramOptions.UseMock)
             {
                 try
                 {
@@ -132,7 +132,7 @@ public class TelegramController : ControllerBase
     /// Deleguje logikę do handlera CQRS (SendCurationBatchCommandHandler).
     /// </summary>
     [HttpPost("trigger-drafts")]
-    public async Task<IActionResult> TriggerDrafts([FromQuery] int count = 5, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> TriggerDrafts([FromQuery] int? count = null, CancellationToken cancellationToken = default)
     {
         var result = await _bus.InvokeAsync<SendCurationBatchResult>(
             new SendCurationBatchCommand(count),
@@ -156,13 +156,13 @@ public class TelegramController : ControllerBase
             return BadRequest(new { Error = "Brak podanego adresu webhookUrl w ciele żądania lub query." });
         }
 
-        var token = _configuration["Telegram:BotToken"];
+        var token = _telegramOptions.BotToken;
         if (string.IsNullOrWhiteSpace(token) || token.Contains("PLACEHOLDER"))
         {
             return BadRequest(new { Error = "Brak skonfigurowanego Telegram:BotToken." });
         }
 
-        var rawSecret = _configuration["Telegram:SecretToken"];
+        var rawSecret = _telegramOptions.SecretToken;
         string? secretToken = null;
 
         if (!string.IsNullOrWhiteSpace(rawSecret) && !rawSecret.Contains("PLACEHOLDER"))
@@ -210,7 +210,7 @@ public class TelegramController : ControllerBase
     /// </summary>
     [HttpPost("send-curation-batch")]
     public async Task<IActionResult> SendCurationBatch(
-        [FromQuery] int count = 5,
+        [FromQuery] int? count = null,
         CancellationToken cancellationToken = default)
     {
         var result = await _bus.InvokeAsync<SendCurationBatchResult>(
