@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -10,6 +11,7 @@ public class WykopClient : IWykopClient
     private const string AppTokenCacheKey = "wykop_app_oauth_token";
     private const string UserTokenCacheKey = "wykop_user_oauth_token";
     private const string RefreshTokenCacheKey = "wykop_user_refresh_token";
+    private static readonly SemaphoreSlim _fileLock = new(1, 1);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _memoryCache;
@@ -60,16 +62,42 @@ public class WykopClient : IWykopClient
         throw new InvalidOperationException("Odpowiedź z endpointu /connect nie zawierała pola data.connect_url.");
     }
 
-    private static string TokenFilePath
+    private static string GetTokenFilePath()
     {
-        get
+        var logsPath = Path.Combine(AppContext.BaseDirectory, "logs", "wykop_tokens.json");
+        var basePath = Path.Combine(AppContext.BaseDirectory, "wykop_tokens.json");
+
+        // Jeśli plik istnieje w głównym katalogu (dla wstecznej kompatybilności), użyj go, w przeciwnym razie wybierz logs/
+        return File.Exists(basePath) ? basePath : logsPath;
+    }
+
+    private async Task<WykopTokenData?> ReadTokenFileAsync(CancellationToken cancellationToken)
+    {
+        var tokenPath = GetTokenFilePath();
+        if (!File.Exists(tokenPath))
         {
-            var logsDir = Path.Combine(AppContext.BaseDirectory, "logs");
-            if (Directory.Exists(logsDir))
+            return null;
+        }
+
+        await _fileLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (!File.Exists(tokenPath))
             {
-                return Path.Combine(logsDir, "wykop_tokens.json");
+                return null;
             }
-            return Path.Combine(AppContext.BaseDirectory, "wykop_tokens.json");
+
+            var fileContent = await File.ReadAllTextAsync(tokenPath, cancellationToken);
+            return JsonSerializer.Deserialize<WykopTokenData>(fileContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Błąd odczytu tokenów Wykop z pliku {Path}", tokenPath);
+            return null;
+        }
+        finally
+        {
+            _fileLock.Release();
         }
     }
 
@@ -88,26 +116,37 @@ public class WykopClient : IWykopClient
             _memoryCache.Set(RefreshTokenCacheKey, refreshToken.Trim(), TimeSpan.FromDays(30));
         }
 
+        var tokenPath = GetTokenFilePath();
+        await _fileLock.WaitAsync(cancellationToken);
         try
         {
-            var data = new
+            var dir = Path.GetDirectoryName(tokenPath);
+            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            var data = new WykopTokenData
             {
                 UserToken = userToken.Trim(),
                 RefreshToken = refreshToken?.Trim(),
                 SavedAt = DateTime.UtcNow
             };
             var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(TokenFilePath, json, cancellationToken);
-            _logger.LogInformation("Zapisano trwały token użytkownika Wykop w pliku {Path}", TokenFilePath);
+            await File.WriteAllTextAsync(tokenPath, json, cancellationToken);
+            _logger.LogInformation("Zapisano trwały token użytkownika Wykop w pliku {Path}", tokenPath);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Nie udało się zapisać tokenów Wykop do pliku {Path}", TokenFilePath);
+            _logger.LogWarning(ex, "Nie udało się zapisać tokenów Wykop do pliku {Path}", tokenPath);
+        }
+        finally
+        {
+            _fileLock.Release();
         }
 
         _logger.LogInformation("Zapisano token użytkownika Wykop w pamięci podręcznej.");
     }
-
 
     public async Task<string?> UploadPhotoAsync(string imageUrlOrPath, CancellationToken cancellationToken = default)
     {
@@ -150,31 +189,28 @@ public class WykopClient : IWykopClient
 
             var baseUrl = GetBaseUrl();
             var wykopClient = _httpClientFactory.CreateClient("WykopClient");
-            using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "media/photos/upload?type=entries"));
-            uploadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userToken);
-            uploadRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            using var form = new MultipartFormDataContent();
-            var byteContent = new ByteArrayContent(imageBytes);
-            byteContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
-            form.Add(byteContent, "file", fileName);
-            uploadRequest.Content = form;
-
-            using var uploadResponse = await wykopClient.SendAsync(uploadRequest, cancellationToken);
-            if (!uploadResponse.IsSuccessStatusCode)
+            var (success, key, isAuthError) = await ExecuteUploadRequestAsync(wykopClient, baseUrl, imageBytes, fileName, userToken, cancellationToken);
+            if (success && key != null)
             {
-                var err = await uploadResponse.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning("Nie udało się wysłać zdjęcia do Wykop v3 (HTTP {StatusCode}): {Error}", uploadResponse.StatusCode, err);
-                return null;
+                return key;
             }
 
-            var json = await uploadResponse.Content.ReadAsStringAsync(cancellationToken);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("key", out var keyEl))
+            // Jeśli wysłanie nie powiodło się z powodu błędu autoryzacji (401/403), odświeżamy token i ponawiamy
+            if (isAuthError)
             {
-                var key = keyEl.GetString();
-                _logger.LogInformation("Pomyślnie wysłano zdjęcie do Wykopu. Klucz zdjęcia: {Key}", key);
-                return key;
+                _logger.LogWarning("Błąd autoryzacji podczas wysyłania zdjęcia do Wykopu. Próba automatycznego odświeżenia tokenu użytkownika...");
+                _memoryCache.Remove(UserTokenCacheKey);
+                var refreshedToken = await TryRefreshStoredUserTokenAsync(cancellationToken);
+                if (!string.IsNullOrWhiteSpace(refreshedToken))
+                {
+                    _logger.LogInformation("Token odświeżony pomyślnie. Ponawianie wysyłki zdjęcia...");
+                    var retryResult = await ExecuteUploadRequestAsync(wykopClient, baseUrl, imageBytes, fileName, refreshedToken, cancellationToken);
+                    if (retryResult.Success && retryResult.Key != null)
+                    {
+                        return retryResult.Key;
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -185,8 +221,46 @@ public class WykopClient : IWykopClient
         return null;
     }
 
-    public async Task<string> CreateEntryAsync(string content, string? photoKey = null, CancellationToken cancellationToken = default)
+    private async Task<(bool Success, string? Key, bool IsAuthError)> ExecuteUploadRequestAsync(
+        HttpClient wykopClient,
+        string baseUrl,
+        byte[] imageBytes,
+        string fileName,
+        string userToken,
+        CancellationToken cancellationToken)
+    {
+        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "media/photos/upload?type=entries"));
+        uploadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userToken);
+        uploadRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
+        using var form = new MultipartFormDataContent();
+        var byteContent = new ByteArrayContent(imageBytes);
+        byteContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        form.Add(byteContent, "file", fileName);
+        uploadRequest.Content = form;
+
+        using var uploadResponse = await wykopClient.SendAsync(uploadRequest, cancellationToken);
+        if (!uploadResponse.IsSuccessStatusCode)
+        {
+            var err = await uploadResponse.Content.ReadAsStringAsync(cancellationToken);
+            var isAuth = uploadResponse.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
+            _logger.LogWarning("Nie udało się wysłać zdjęcia do Wykop v3 (HTTP {StatusCode}): {Error}", uploadResponse.StatusCode, err);
+            return (false, null, isAuth);
+        }
+
+        var json = await uploadResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("key", out var keyEl))
+        {
+            var key = keyEl.GetString();
+            _logger.LogInformation("Pomyślnie wysłano zdjęcie do Wykopu. Klucz zdjęcia: {Key}", key);
+            return (true, key, false);
+        }
+
+        return (false, null, false);
+    }
+
+    public async Task<string> CreateEntryAsync(string content, string? photoKey = null, CancellationToken cancellationToken = default)
     {
         var isMock = _wykopOptions.UseMock;
 
@@ -222,8 +296,56 @@ public class WykopClient : IWykopClient
 
         var baseUrl = GetBaseUrl();
         var client = _httpClientFactory.CreateClient("WykopClient");
-        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "entries"));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userToken);
+
+        var response = await SendEntryRequestAsync(client, baseUrl, content, photoKey, userToken, cancellationToken);
+
+        // Jeśli status to 401 lub 403, spróbujmy odświeżyć token i ponowić zapytanie
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("Wykop zwrócił status {StatusCode} ({Error}) podczas publikacji wpisu. Próba automatycznego odświeżenia tokenu użytkownika...", response.StatusCode, errorBody);
+
+            _memoryCache.Remove(UserTokenCacheKey);
+            var refreshedToken = await TryRefreshStoredUserTokenAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(refreshedToken))
+            {
+                _logger.LogInformation("Token użytkownika odświeżony pomyślnie. Ponawianie publikacji wpisu na Wykopie...");
+                response.Dispose();
+                response = await SendEntryRequestAsync(client, baseUrl, content, photoKey, refreshedToken, cancellationToken);
+            }
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Błąd podczas publikowania wpisu na Wykop v3 (HTTP {StatusCode}): {Error}", response.StatusCode, errorBody);
+                throw new HttpRequestException($"Wykop API zwróciło status {response.StatusCode}: {errorBody}");
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(responseJson);
+
+            if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("id", out var idEl))
+            {
+                return idEl.ToString();
+            }
+
+            return "wykop-entry-published";
+        }
+    }
+
+    private static async Task<HttpResponseMessage> SendEntryRequestAsync(
+        HttpClient client,
+        string baseUrl,
+        string content,
+        string? photoKey,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "entries"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Content = JsonContent.Create(new
         {
@@ -234,24 +356,7 @@ public class WykopClient : IWykopClient
             }
         });
 
-        using var response = await client.SendAsync(request, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Błąd podczas publikowania wpisu na Wykop v3 (HTTP {StatusCode}): {Error}", response.StatusCode, errorBody);
-            throw new HttpRequestException($"Wykop API zwróciło status {response.StatusCode}: {errorBody}");
-        }
-
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        using var doc = JsonDocument.Parse(responseJson);
-
-        if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("id", out var idEl))
-        {
-            return idEl.ToString();
-        }
-
-        return "wykop-entry-published";
+        return await client.SendAsync(request, cancellationToken);
     }
 
     private async Task<string?> GetOrRefreshUserTokenAsync(CancellationToken cancellationToken)
@@ -263,37 +368,45 @@ public class WykopClient : IWykopClient
         }
 
         // 1b. Sprawdź trwały plik wykop_tokens.json
-        var tokenPath = File.Exists(TokenFilePath)
-            ? TokenFilePath
-            : Path.Combine(AppContext.BaseDirectory, "wykop_tokens.json");
-
-        if (File.Exists(tokenPath))
+        var fileData = await ReadTokenFileAsync(cancellationToken);
+        if (fileData != null)
         {
-            try
+            if (!string.IsNullOrWhiteSpace(fileData.RefreshToken))
             {
-                var fileContent = await File.ReadAllTextAsync(TokenFilePath, cancellationToken);
-                using var doc = JsonDocument.Parse(fileContent);
-                if (doc.RootElement.TryGetProperty("UserToken", out var uTokenEl))
+                _memoryCache.Set(RefreshTokenCacheKey, fileData.RefreshToken.Trim(), TimeSpan.FromDays(30));
+            }
+
+            if (!string.IsNullOrWhiteSpace(fileData.UserToken))
+            {
+                // Sprawdź wiek tokenu (jeśli SavedAt jest obecne)
+                if (fileData.SavedAt.HasValue)
                 {
-                    var fileUserToken = uTokenEl.GetString();
-                    if (!string.IsNullOrWhiteSpace(fileUserToken))
+                    var tokenAge = DateTime.UtcNow - fileData.SavedAt.Value;
+                    if (tokenAge > TimeSpan.FromHours(23))
                     {
-                        _memoryCache.Set(UserTokenCacheKey, fileUserToken.Trim(), TimeSpan.FromHours(12));
-                        if (doc.RootElement.TryGetProperty("RefreshToken", out var rTokenEl))
+                        _logger.LogInformation("Token użytkownika Wykop w pliku wygasł ({AgeHours:F1}h temu). Próba automatycznego odświeżenia za pomocą RefreshToken...", tokenAge.TotalHours);
+                        if (!string.IsNullOrWhiteSpace(fileData.RefreshToken))
                         {
-                            var fileRefresh = rTokenEl.GetString();
-                            if (!string.IsNullOrWhiteSpace(fileRefresh))
+                            var refreshed = await RefreshUserTokenAsync(fileData.RefreshToken.Trim(), cancellationToken);
+                            if (!string.IsNullOrWhiteSpace(refreshed))
                             {
-                                _memoryCache.Set(RefreshTokenCacheKey, fileRefresh.Trim(), TimeSpan.FromDays(30));
+                                return refreshed;
                             }
                         }
-                        return fileUserToken.Trim();
+                    }
+                    else
+                    {
+                        var remainingTtl = TimeSpan.FromHours(23) - tokenAge;
+                        _memoryCache.Set(UserTokenCacheKey, fileData.UserToken.Trim(), remainingTtl);
+                        return fileData.UserToken.Trim();
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Błąd odczytu tokenów Wykop z pliku {Path}", TokenFilePath);
+                else
+                {
+                    // Starszy format bez SavedAt - cache'uj na 1h
+                    _memoryCache.Set(UserTokenCacheKey, fileData.UserToken.Trim(), TimeSpan.FromHours(1));
+                    return fileData.UserToken.Trim();
+                }
             }
         }
 
@@ -305,21 +418,39 @@ public class WykopClient : IWykopClient
             return userToken.Trim();
         }
 
-        // 3. Sprawdź RefreshToken
-        var refreshToken = _memoryCache.TryGetValue(RefreshTokenCacheKey, out string? cachedRefresh) && !string.IsNullOrWhiteSpace(cachedRefresh)
-            ? cachedRefresh
-            : _wykopOptions.RefreshToken;
+        // 3. Sprawdź RefreshToken z cache, pliku lub konfiguracji
+        return await TryRefreshStoredUserTokenAsync(cancellationToken);
+    }
 
-        if (!string.IsNullOrWhiteSpace(refreshToken) && !refreshToken.Contains("PLACEHOLDER"))
+    private async Task<string?> TryRefreshStoredUserTokenAsync(CancellationToken cancellationToken)
+    {
+        string? refreshToken = null;
+        if (_memoryCache.TryGetValue(RefreshTokenCacheKey, out string? cachedRefresh) && !string.IsNullOrWhiteSpace(cachedRefresh))
         {
-            var refreshed = await RefreshUserTokenAsync(refreshToken.Trim(), cancellationToken);
-            if (!string.IsNullOrWhiteSpace(refreshed))
+            refreshToken = cachedRefresh.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            var fileData = await ReadTokenFileAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(fileData?.RefreshToken))
             {
-                return refreshed;
+                refreshToken = fileData.RefreshToken.Trim();
             }
         }
 
-        return null;
+        if (string.IsNullOrWhiteSpace(refreshToken) && !string.IsNullOrWhiteSpace(_wykopOptions.RefreshToken) && !_wykopOptions.RefreshToken.Contains("PLACEHOLDER"))
+        {
+            refreshToken = _wykopOptions.RefreshToken.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            _logger.LogWarning("Brak tokena odświeżania (RefreshToken) Wykop.");
+            return null;
+        }
+
+        return await RefreshUserTokenAsync(refreshToken, cancellationToken);
     }
 
     private async Task<string?> RefreshUserTokenAsync(string refreshToken, CancellationToken cancellationToken)
@@ -330,6 +461,13 @@ public class WykopClient : IWykopClient
 
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "refresh-token"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        var appToken = await GetOrRefreshAppTokenAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(appToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", appToken);
+        }
+
         request.Content = JsonContent.Create(new
         {
             data = new
@@ -341,7 +479,8 @@ public class WykopClient : IWykopClient
         using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Nie udało się odświeżyć tokenu Wykop (HTTP {StatusCode})", response.StatusCode);
+            var err = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("Nie udało się odświeżyć tokenu Wykop (HTTP {StatusCode}): {Error}", response.StatusCode, err);
             return null;
         }
 
@@ -359,6 +498,7 @@ public class WykopClient : IWykopClient
                 }
 
                 await SaveUserTokensAsync(newToken, newRefresh ?? refreshToken, cancellationToken);
+                _logger.LogInformation("Pomyślnie odświeżono i zapisano nowy token użytkownika Wykop.");
                 return newToken;
             }
         }
@@ -425,5 +565,13 @@ public class WykopClient : IWykopClient
         if (!baseUrl.EndsWith("/")) baseUrl += "/";
         return baseUrl;
     }
+
+    private sealed class WykopTokenData
+    {
+        public string? UserToken { get; set; }
+        public string? RefreshToken { get; set; }
+        public DateTime? SavedAt { get; set; }
+    }
 }
+
 
