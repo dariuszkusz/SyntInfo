@@ -26,7 +26,7 @@ jobs:
         run: dotnet build Backend/SyntInfo.sln --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test Backend/SyntInfo.sln --no-build --verbosity normal
+        run: dotnet test Backend/SyntInfo.sln --no-build --configuration Release --verbosity normal
 
   frontend-ci:
     name: Frontend CI (Angular 21)
