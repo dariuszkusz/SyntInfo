@@ -238,4 +238,73 @@ describe('News Feed', () => {
       cy.contains('Pozytywna wiadomość ze świata').should('be.visible');
     });
   });
+
+  describe('Source Attribution & AI Transparency', () => {
+    it('should display visible source links with domain names and correct attributes', () => {
+      // Sekcja Źródło / Źródła
+      cy.contains('Źródło:').should('be.visible');
+
+      // Linki do źródeł
+      cy.get('.source-link').should('have.length', 3);
+      
+      // Sprawdzenie linków do serwisów
+      cy.contains('.source-link', 'tvn24.pl')
+        .should('be.visible')
+        .and('have.attr', 'href', 'https://tvn24.pl')
+        .and('have.attr', 'target', '_blank')
+        .and('have.attr', 'rel', 'noopener noreferrer')
+        .and('have.attr', 'itemprop', 'isBasedOn');
+
+      cy.contains('.source-link', 'bbc.com')
+        .should('be.visible')
+        .and('have.attr', 'href', 'https://bbc.com');
+
+      cy.contains('.source-link', 'dobrewiadomosci.net.pl')
+        .should('be.visible')
+        .and('have.attr', 'href', 'https://dobrewiadomosci.net.pl');
+    });
+
+    it('should include Schema.org NewsArticle semantic microdata on article cards', () => {
+      cy.get('article.article-card').first()
+        .should('have.attr', 'itemtype', 'https://schema.org/NewsArticle');
+
+      cy.get('article.article-card').first().within(() => {
+        cy.get('[itemprop="headline"]').should('be.visible');
+        cy.get('[itemprop="description"]').should('be.visible');
+        cy.get('[itemprop="datePublished"]').should('exist');
+      });
+    });
+
+    it('should display AI summary essence badge and transparency disclaimer', () => {
+      cy.get('.ai-essence-badge').should('have.length', 3);
+      cy.contains('Streszczenie AI').should('be.visible');
+      
+      // Transparentność w stopce
+      cy.contains('Dbamy o transparentność: każde podsumowanie powstaje na bazie oficjalnych kanałów RSS').should('be.visible');
+    });
+  });
+
+  describe('About Project Modal', () => {
+    it('should open about modal from header button and close with return button', () => {
+      cy.get('.about-btn').click();
+      cy.get('.about-modal-container').should('be.visible');
+      cy.contains('O projekcie InfoSkrót').should('be.visible');
+      cy.contains('Polska:').should('be.visible');
+      cy.contains('Świat:').should('be.visible');
+      cy.contains('Transparentność i szacunek dla twórców').should('be.visible');
+      
+      // Przycisk "Powrót do prasówki" powinien być od razu widoczny bez scrollowania
+      cy.contains('.confirm-about-btn', 'Powrót do prasówki').should('be.visible').click();
+      cy.get('.about-modal-container').should('not.exist');
+    });
+
+    it('should open about modal from footer link and close when clicking backdrop', () => {
+      cy.get('.about-footer-link').click();
+      cy.get('.about-modal-container').should('be.visible');
+
+      // Zamknięcie przez kliknięcie w tło
+      cy.get('.about-modal-backdrop').click(10, 10);
+      cy.get('.about-modal-container').should('not.exist');
+    });
+  });
 });

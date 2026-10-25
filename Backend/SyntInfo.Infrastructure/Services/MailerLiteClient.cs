@@ -1,38 +1,35 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using SyntInfo.Application.Interfaces;
 
 namespace SyntInfo.Infrastructure.Services;
 
 public class MailerLiteClient : IMailerLiteClient
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _configuration;
+    private readonly MailerLiteOptions _mailerLiteOptions;
     private readonly ILogger<MailerLiteClient> _logger;
 
-    public MailerLiteClient(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<MailerLiteClient> logger)
+    public MailerLiteClient(IHttpClientFactory httpClientFactory, IOptions<MailerLiteOptions> mailerLiteOptions, ILogger<MailerLiteClient> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _configuration = configuration;
+        _mailerLiteOptions = mailerLiteOptions.Value;
         _logger = logger;
     }
 
     private Uri GetBaseUri()
     {
-        var baseUrl = _configuration["SocialPlatforms:MailerLite:BaseUrl"] ?? "https://connect.mailerlite.com/api/";
+        var baseUrl = _mailerLiteOptions.BaseUrl;
         if (!baseUrl.EndsWith("/")) baseUrl += "/";
         return new Uri(baseUrl);
     }
 
     public async Task<string> SendNewsletterCampaignAsync(string subject, string htmlContent, string plainTextContent, CancellationToken cancellationToken = default)
     {
-        var apiKey = _configuration["SocialPlatforms:MailerLite:ApiKey"];
-        var fromEmail = _configuration["SocialPlatforms:MailerLite:FromEmail"] ?? "infoskrot.app@gmail.com";
-        var fromName = _configuration["SocialPlatforms:MailerLite:FromName"] ?? "InfoSkrót";
-        var isMock = _configuration.GetValue("SocialPlatforms:MailerLite:UseMock", false);
+        var apiKey = _mailerLiteOptions.ApiKey;
+        var fromEmail = _mailerLiteOptions.FromEmail;
+        var fromName = _mailerLiteOptions.FromName;
+        var isMock = _mailerLiteOptions.UseMock;
 
         if (isMock || string.IsNullOrWhiteSpace(apiKey) || apiKey.Contains("PLACEHOLDER"))
         {
@@ -117,8 +114,8 @@ public class MailerLiteClient : IMailerLiteClient
 
     public async Task<bool> SubscribeAsync(string email, string? name = null, CancellationToken cancellationToken = default)
     {
-        var apiKey = _configuration["SocialPlatforms:MailerLite:ApiKey"];
-        var isMock = _configuration.GetValue("SocialPlatforms:MailerLite:UseMock", false);
+        var apiKey = _mailerLiteOptions.ApiKey;
+        var isMock = _mailerLiteOptions.UseMock;
 
         if (isMock || string.IsNullOrWhiteSpace(apiKey) || apiKey.Contains("PLACEHOLDER"))
         {
@@ -155,8 +152,8 @@ public class MailerLiteClient : IMailerLiteClient
 
     public async Task<bool> UnsubscribeAsync(string email, CancellationToken cancellationToken = default)
     {
-        var apiKey = _configuration["SocialPlatforms:MailerLite:ApiKey"];
-        var isMock = _configuration.GetValue("SocialPlatforms:MailerLite:UseMock", false);
+        var apiKey = _mailerLiteOptions.ApiKey;
+        var isMock = _mailerLiteOptions.UseMock;
 
         if (isMock || string.IsNullOrWhiteSpace(apiKey) || apiKey.Contains("PLACEHOLDER"))
         {

@@ -1,8 +1,4 @@
 using System.Net;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using SyntInfo.Application.Interfaces;
-using SyntInfo.Domain.Entities;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -13,15 +9,15 @@ namespace SyntInfo.Infrastructure.Services;
 public class TelegramNotificationService : ITelegramNotificationService
 {
     private readonly ITelegramBotClient? _botClient;
-    private readonly IConfiguration _configuration;
+    private readonly TelegramOptions _telegramOptions;
     private readonly ILogger<TelegramNotificationService> _logger;
 
     public TelegramNotificationService(
-        IConfiguration configuration,
+        IOptions<TelegramOptions> telegramOptions,
         ILogger<TelegramNotificationService> logger,
         ITelegramBotClient? botClient = null)
     {
-        _configuration = configuration;
+        _telegramOptions = telegramOptions.Value;
         _logger = logger;
         _botClient = botClient;
     }
@@ -30,7 +26,7 @@ public class TelegramNotificationService : ITelegramNotificationService
     {
         if (_botClient != null) return _botClient;
 
-        var token = _configuration["Telegram:BotToken"];
+        var token = _telegramOptions.BotToken;
         if (string.IsNullOrWhiteSpace(token) || token.Contains("PLACEHOLDER"))
         {
             return null;
@@ -41,8 +37,8 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task<long> SendDraftToAdminAsync(SocialPostDraft draft, NewsArticle article, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _configuration["Telegram:AdminChatId"];
-        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
         var client = ResolveClient();
 
         if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || chatIdStr.Contains("PLACEHOLDER"))
@@ -133,8 +129,8 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task UpdateDraftMessageAsync(long messageId, SocialPostDraft draft, string decisionSummary, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _configuration["Telegram:AdminChatId"];
-        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
         var client = ResolveClient();
 
         if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || chatIdStr.Contains("PLACEHOLDER"))
@@ -180,8 +176,8 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task<long> SendArticleForCurationAsync(NewsArticle article, bool isSelected, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _configuration["Telegram:AdminChatId"];
-        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
         var client = ResolveClient();
 
         if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || chatIdStr.Contains("PLACEHOLDER") || !long.TryParse(chatIdStr, out var chatId))
@@ -229,8 +225,8 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task UpdateCurationMessageAsync(long messageId, NewsArticle article, bool isSelected, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _configuration["Telegram:AdminChatId"];
-        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
         var client = ResolveClient();
 
         if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
@@ -275,8 +271,8 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task<long> SendDigestControlPanelAsync(int selectedCount, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _configuration["Telegram:AdminChatId"];
-        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
         var client = ResolveClient();
 
         if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
@@ -313,8 +309,8 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task<long> SendSimpleNotificationAsync(string message, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _configuration["Telegram:AdminChatId"];
-        var isMock = _configuration.GetValue("Telegram:UseMock", false);
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
         var client = ResolveClient();
 
         if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))

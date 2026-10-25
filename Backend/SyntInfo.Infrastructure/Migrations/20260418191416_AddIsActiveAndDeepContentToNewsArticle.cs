@@ -2,38 +2,37 @@
 
 #nullable disable
 
-namespace SyntInfo.Infrastructure.Migrations
+namespace SyntInfo.Infrastructure.Migrations;
+
+/// <inheritdoc />
+public partial class AddIsActiveAndDeepContentToNewsArticle : Migration
 {
     /// <inheritdoc />
-    public partial class AddIsActiveAndDeepContentToNewsArticle : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.AddColumn<string>(
-                name: "DeepContent",
-                table: "NewsArticles",
-                type: "text",
-                nullable: true);
+        migrationBuilder.AddColumn<string>(
+            name: "DeepContent",
+            table: "NewsArticles",
+            type: "text",
+            nullable: true);
 
-            migrationBuilder.AddColumn<bool>(
-                name: "IsActive",
-                table: "NewsArticles",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
-        }
+        migrationBuilder.AddColumn<bool>(
+            name: "IsActive",
+            table: "NewsArticles",
+            type: "boolean",
+            nullable: false,
+            defaultValue: false);
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropColumn(
-                name: "DeepContent",
-                table: "NewsArticles");
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropColumn(
+            name: "DeepContent",
+            table: "NewsArticles");
 
-            migrationBuilder.DropColumn(
-                name: "IsActive",
-                table: "NewsArticles");
-        }
+        migrationBuilder.DropColumn(
+            name: "IsActive",
+            table: "NewsArticles");
     }
 }

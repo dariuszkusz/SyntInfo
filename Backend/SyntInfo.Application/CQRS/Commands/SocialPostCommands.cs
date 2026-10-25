@@ -1,5 +1,3 @@
-using SyntInfo.Domain.Entities;
-
 namespace SyntInfo.Application.CQRS.Commands;
 
 
@@ -50,7 +48,7 @@ public record SendTestDraftResult(
 /// <summary>
 /// Komenda wysyłająca partię artykułów do selekcji na Telegramie wraz z panelem sterowania wydaniem.
 /// </summary>
-public record SendCurationBatchCommand(int Count = 5);
+public record SendCurationBatchCommand(int? Count = null);
 
 public record SendCurationBatchResult(
     bool Success,

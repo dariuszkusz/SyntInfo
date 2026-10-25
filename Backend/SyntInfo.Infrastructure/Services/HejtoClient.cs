@@ -2,9 +2,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using SyntInfo.Application.Interfaces;
 
 namespace SyntInfo.Infrastructure.Services;
 
@@ -14,25 +11,25 @@ public class HejtoClient : IHejtoClient
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _memoryCache;
-    private readonly IConfiguration _configuration;
+    private readonly HejtoOptions _hejtoOptions;
     private readonly ILogger<HejtoClient> _logger;
 
     public HejtoClient(
         IHttpClientFactory httpClientFactory,
         IMemoryCache memoryCache,
-        IConfiguration configuration,
+        IOptions<HejtoOptions> hejtoOptions,
         ILogger<HejtoClient> logger)
     {
         _httpClientFactory = httpClientFactory;
         _memoryCache = memoryCache;
-        _configuration = configuration;
+        _hejtoOptions = hejtoOptions.Value;
         _logger = logger;
     }
 
     public async Task<string> CreatePostAsync(string content, string? communitySlug = null, CancellationToken cancellationToken = default)
     {
-        var targetCommunity = communitySlug ?? _configuration["SocialPlatforms:Hejto:DefaultCommunity"] ?? "wiadomosci-polska";
-        var isMock = _configuration.GetValue("SocialPlatforms:Hejto:UseMock", false);
+        var targetCommunity = communitySlug ?? _hejtoOptions.DefaultCommunity;
+        var isMock = _hejtoOptions.UseMock;
 
         string? accessToken = null;
         try
@@ -55,10 +52,10 @@ public class HejtoClient : IHejtoClient
         var finalContent = content;
         if (!finalContent.Contains('#'))
         {
-            finalContent = $"{finalContent.Trim()}\n\n#wiadomosci #infoskrot";
+            finalContent = $"{finalContent.Trim()}\n\n#wiadomosci #infoskrot #polityka";
         }
 
-        var baseUrl = _configuration["SocialPlatforms:Hejto:BaseUrl"] ?? "https://api.hejto.pl/";
+        var baseUrl = _hejtoOptions.BaseUrl;
         if (!baseUrl.EndsWith("/")) baseUrl += "/";
 
         var client = _httpClientFactory.CreateClient("HejtoClient");
@@ -118,9 +115,9 @@ public class HejtoClient : IHejtoClient
         }
 
         // 2. Sprawdź czy zdefiniowano bezpośredni token statyczny
-        var directToken = _configuration["SocialPlatforms:Hejto:Token"];
-        var clientId = _configuration["SocialPlatforms:Hejto:ClientId"];
-        var clientSecret = _configuration["SocialPlatforms:Hejto:ClientSecret"];
+        var directToken = _hejtoOptions.Token;
+        var clientId = _hejtoOptions.ClientId;
+        var clientSecret = _hejtoOptions.ClientSecret;
 
         if (string.IsNullOrWhiteSpace(clientId) || clientId.Contains("PLACEHOLDER") ||
             string.IsNullOrWhiteSpace(clientSecret) || clientSecret.Contains("PLACEHOLDER"))
@@ -134,7 +131,7 @@ public class HejtoClient : IHejtoClient
         }
 
         // 3. Pobierz nowy token z serwera autoryzacji Hejto
-        var authUrl = _configuration["SocialPlatforms:Hejto:AuthUrl"] ?? "https://auth.hejto.pl/token";
+        var authUrl = _hejtoOptions.AuthUrl;
         _logger.LogInformation("Pobieranie nowego tokena OAuth2 z Hejto ({AuthUrl})...", authUrl);
 
         var authClient = _httpClientFactory.CreateClient();

@@ -1,8 +1,4 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using SyntInfo.Application.Interfaces;
 
 namespace SyntInfo.Api.Controllers;
 
@@ -13,16 +9,16 @@ namespace SyntInfo.Api.Controllers;
 public class WykopAuthController : ControllerBase
 {
     private readonly IWykopClient _wykopClient;
-    private readonly IConfiguration _configuration;
+    private readonly AppOptions _appOptions;
     private readonly ILogger<WykopAuthController> _logger;
 
     public WykopAuthController(
         IWykopClient wykopClient,
-        IConfiguration configuration,
+        IOptions<AppOptions> appOptions,
         ILogger<WykopAuthController> logger)
     {
         _wykopClient = wykopClient;
-        _configuration = configuration;
+        _appOptions = appOptions.Value;
         _logger = logger;
     }
 
@@ -60,7 +56,7 @@ public class WykopAuthController : ControllerBase
         [FromQuery] string? rtoken,
         CancellationToken cancellationToken)
     {
-        var frontendUrl = _configuration["FrontendUrl"]?.TrimEnd('/') ?? "http://localhost:4200";
+        var frontendUrl = _appOptions.FrontendUrl.TrimEnd('/');
 
         if (string.IsNullOrWhiteSpace(token))
         {

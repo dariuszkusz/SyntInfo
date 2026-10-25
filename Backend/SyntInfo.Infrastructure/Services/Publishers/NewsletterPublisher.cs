@@ -1,6 +1,4 @@
-using SyntInfo.Application.Interfaces;
 using SyntInfo.Application.Models.Social;
-using SyntInfo.Domain.Entities;
 using SyntInfo.Infrastructure.Services.Newsletter;
 
 namespace SyntInfo.Infrastructure.Services.Publishers;

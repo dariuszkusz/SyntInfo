@@ -2,9 +2,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using SyntInfo.Application.Interfaces;
 
 namespace SyntInfo.Infrastructure.Services;
 
@@ -16,18 +13,18 @@ public class WykopClient : IWykopClient
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _memoryCache;
-    private readonly IConfiguration _configuration;
+    private readonly WykopOptions _wykopOptions;
     private readonly ILogger<WykopClient> _logger;
 
     public WykopClient(
         IHttpClientFactory httpClientFactory,
         IMemoryCache memoryCache,
-        IConfiguration configuration,
+        IOptions<WykopOptions> wykopOptions,
         ILogger<WykopClient> logger)
     {
         _httpClientFactory = httpClientFactory;
         _memoryCache = memoryCache;
-        _configuration = configuration;
+        _wykopOptions = wykopOptions.Value;
         _logger = logger;
     }
 
@@ -191,7 +188,7 @@ public class WykopClient : IWykopClient
     public async Task<string> CreateEntryAsync(string content, string? photoKey = null, CancellationToken cancellationToken = default)
 
     {
-        var isMock = _configuration.GetValue("SocialPlatforms:Wykop:UseMock", false);
+        var isMock = _wykopOptions.UseMock;
 
         string? userToken = null;
         try
@@ -301,7 +298,7 @@ public class WykopClient : IWykopClient
         }
 
         // 2. Sprawdź konfigurację (UserToken)
-        var userToken = _configuration["SocialPlatforms:Wykop:UserToken"];
+        var userToken = _wykopOptions.UserToken;
         if (!string.IsNullOrWhiteSpace(userToken) && !userToken.Contains("PLACEHOLDER"))
         {
             _memoryCache.Set(UserTokenCacheKey, userToken.Trim(), TimeSpan.FromHours(12));
@@ -311,7 +308,7 @@ public class WykopClient : IWykopClient
         // 3. Sprawdź RefreshToken
         var refreshToken = _memoryCache.TryGetValue(RefreshTokenCacheKey, out string? cachedRefresh) && !string.IsNullOrWhiteSpace(cachedRefresh)
             ? cachedRefresh
-            : _configuration["SocialPlatforms:Wykop:RefreshToken"];
+            : _wykopOptions.RefreshToken;
 
         if (!string.IsNullOrWhiteSpace(refreshToken) && !refreshToken.Contains("PLACEHOLDER"))
         {
@@ -376,8 +373,8 @@ public class WykopClient : IWykopClient
             return cachedToken;
         }
 
-        var key = _configuration["SocialPlatforms:Wykop:Key"] ?? _configuration["SocialPlatforms:Wykop:Token"];
-        var secret = _configuration["SocialPlatforms:Wykop:Secret"];
+        var key = _wykopOptions.Key ?? _wykopOptions.Token;
+        var secret = _wykopOptions.Secret;
 
         if (string.IsNullOrWhiteSpace(key) || key.Contains("PLACEHOLDER") ||
             string.IsNullOrWhiteSpace(secret) || secret.Contains("PLACEHOLDER"))
@@ -385,7 +382,7 @@ public class WykopClient : IWykopClient
             return null;
         }
 
-        var authUrl = _configuration["SocialPlatforms:Wykop:AuthUrl"] ?? "https://wykop.pl/api/v3/auth";
+        var authUrl = _wykopOptions.AuthUrl;
         var client = _httpClientFactory.CreateClient("WykopClient");
         using var authRequest = new HttpRequestMessage(HttpMethod.Post, authUrl);
         authRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -424,7 +421,7 @@ public class WykopClient : IWykopClient
 
     private string GetBaseUrl()
     {
-        var baseUrl = _configuration["SocialPlatforms:Wykop:BaseUrl"] ?? "https://wykop.pl/api/v3/";
+        var baseUrl = _wykopOptions.BaseUrl;
         if (!baseUrl.EndsWith("/")) baseUrl += "/";
         return baseUrl;
     }

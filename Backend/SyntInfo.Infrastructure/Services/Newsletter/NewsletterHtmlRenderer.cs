@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
-using SyntInfo.Domain.Entities;
 
 namespace SyntInfo.Infrastructure.Services.Newsletter;
 

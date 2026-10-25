@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Quartz;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine;
@@ -11,16 +9,13 @@ public class SocialCurationJob : IJob
 {
     private readonly ILogger<SocialCurationJob> _logger;
     private readonly IMessageBus _bus;
-    private readonly IConfiguration _configuration;
 
     public SocialCurationJob(
         ILogger<SocialCurationJob> logger,
-        IMessageBus bus,
-        IConfiguration configuration)
+        IMessageBus bus)
     {
         _logger = logger;
         _bus = bus;
-        _configuration = configuration;
     }
 
     public async Task Execute(IJobExecutionContext context)
@@ -29,10 +24,8 @@ public class SocialCurationJob : IJob
 
         context.CancellationToken.ThrowIfCancellationRequested();
 
-        var count = _configuration.GetValue("SocialPlatforms:MaxArticlesPerRun", 5);
-
         var result = await _bus.InvokeAsync<SendCurationBatchResult>(
-            new SendCurationBatchCommand(count),
+            new SendCurationBatchCommand(),
             context.CancellationToken);
 
         _logger.LogInformation(

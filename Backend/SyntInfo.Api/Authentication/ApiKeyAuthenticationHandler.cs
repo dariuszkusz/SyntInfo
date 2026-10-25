@@ -1,9 +1,6 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace SyntInfo.Api.Authentication;
 
@@ -12,21 +9,21 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     public const string SchemeName = "AdminApiKey";
     public const string HeaderName = "X-Admin-Key";
 
-    private readonly IConfiguration _configuration;
+    private readonly AdminOptions _adminOptions;
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        IConfiguration configuration)
+        IOptions<AdminOptions> adminOptions)
         : base(options, logger, encoder)
     {
-        _configuration = configuration;
+        _adminOptions = adminOptions.Value;
     }
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var configuredKey = _configuration["Admin:ApiKey"];
+        var configuredKey = _adminOptions.ApiKey;
         if (string.IsNullOrWhiteSpace(configuredKey) || configuredKey.Contains("PLACEHOLDER"))
         {
             Logger.LogError("Klucz Admin:ApiKey nie został poprawnie skonfigurowany w User Secrets lub zmiennych środowiskowych.");
@@ -62,7 +59,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         byte[] providedBytes = System.Text.Encoding.UTF8.GetBytes(providedKey);
         byte[] configuredBytes = System.Text.Encoding.UTF8.GetBytes(configuredKey);
 
-        if (providedBytes.Length != configuredBytes.Length || 
+        if (providedBytes.Length != configuredBytes.Length ||
             !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes))
         {
             return Task.FromResult(AuthenticateResult.Fail("Nieprawidłowy klucz administracyjny."));
