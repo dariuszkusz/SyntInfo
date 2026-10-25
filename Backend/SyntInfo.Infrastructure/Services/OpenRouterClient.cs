@@ -101,10 +101,9 @@ public class OpenRouterClient : IOpenRouterClient
             {
                 var response = await CallOpenRouterAsync(currentModel, systemPrompt, userPrompt, forceJson, cancellationToken);
 
-                // Validacja JSON jesli wymuszony
-                if (forceJson && string.IsNullOrWhiteSpace(response))
+                if (forceJson)
                 {
-                    throw new Exception("Empty response from LLM when JSON was expected.");
+                    ValidateJsonResponse(response);
                 }
 
                 return response;
@@ -305,5 +304,20 @@ public class OpenRouterClient : IOpenRouterClient
             _logger.LogInformation("[Rate Limit] Remaining: {Remaining}", remaining.FirstOrDefault());
         if (headers.TryGetValues("X-RateLimit-Reset", out var reset))
             _logger.LogInformation("[Rate Limit] Reset: {Reset}", reset.FirstOrDefault());
+    }
+
+    private static void ValidateJsonResponse(string response)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            throw new Exception("Empty response from LLM when JSON was expected.");
+        }
+
+        var trimmed = response.Trim();
+        if (!trimmed.StartsWith("{") && !trimmed.StartsWith("["))
+        {
+            var snippet = trimmed.Length > 60 ? trimmed[..60] : trimmed;
+            throw new Exception($"Invalid JSON response from LLM (received non-JSON text: '{snippet}...')");
+        }
     }
 }
