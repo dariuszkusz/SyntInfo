@@ -219,5 +219,23 @@ public class TelegramController : ControllerBase
 
         return Ok(result);
     }
+
+    /// <summary>
+    /// Pobiera określoną liczbę wiadomości z bazy danych i publikuje je na mikroblogu Wykop.
+    /// Jeśli parametr count nie zostanie podany, używana jest wartość domyślna z konfiguracji CurationOptions.
+    /// Deleguje logikę do handlera CQRS (PublishWykopNewsCommandHandler).
+    /// </summary>
+    [HttpPost("publish-wykop-news")]
+    public async Task<IActionResult> PublishWykopNews(
+        [FromQuery] int? count = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _bus.InvokeAsync<PublishWykopNewsResult>(
+            new PublishWykopNewsCommand(count),
+            cancellationToken);
+
+        return result.Success ? Ok(result) : StatusCode(500, result);
+    }
 }
+
 
