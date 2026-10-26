@@ -27,6 +27,8 @@ public static class InfrastructureExtensions
                 .AsMatchingInterface()
                 .WithScopedLifetime());
 
+        services.AddSingleton(TimeProvider.System);
+
         return services;
     }
 }
