@@ -17,11 +17,15 @@ public class PublishWykopNewsCommandHandlerTests
     private readonly IWykopClient _wykopClient = Substitute.For<IWykopClient>();
     private readonly ITelegramNotificationService _telegramService = Substitute.For<ITelegramNotificationService>();
     private readonly IOptions<CurationOptions> _curationOptions = Microsoft.Extensions.Options.Options.Create(new CurationOptions { MaxArticlesPerRun = 5 });
+    private readonly TimeProvider _timeProvider = Substitute.For<TimeProvider>();
     private readonly ILogger<PublishWykopNewsCommand> _logger = Substitute.For<ILogger<PublishWykopNewsCommand>>();
+
+    private readonly DateTimeOffset _fixedTime = new(2026, 10, 26, 19, 0, 0, TimeSpan.Zero);
 
     public PublishWykopNewsCommandHandlerTests()
     {
         _uow.NewsArticles.Returns(_newsArticleRepo);
+        _timeProvider.GetUtcNow().Returns(_fixedTime);
     }
 
     [Fact]
@@ -40,6 +44,7 @@ public class PublishWykopNewsCommandHandlerTests
             _wykopClient,
             _telegramService,
             _curationOptions,
+            _timeProvider,
             _logger,
             CancellationToken.None);
 
@@ -85,6 +90,7 @@ public class PublishWykopNewsCommandHandlerTests
             _wykopClient,
             _telegramService,
             _curationOptions,
+            _timeProvider,
             _logger,
             CancellationToken.None);
 
@@ -94,7 +100,7 @@ public class PublishWykopNewsCommandHandlerTests
         Assert.Equal("wykop-entry-999", result.EntryId);
 
         await _wykopClient.Received(1).CreateEntryAsync("Wykop digest content", "photo-key-123", Arg.Any<CancellationToken>());
-        _newsArticleRepo.Received(5).Update(Arg.Any<NewsArticle>());
+        Assert.All(articles, a => Assert.Equal(_fixedTime.UtcDateTime, a.DigestPublishedAt));
         await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _telegramService.Received(1).SendSimpleNotificationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -112,7 +118,7 @@ public class PublishWykopNewsCommandHandlerTests
         _newsArticleRepo.GetActiveArticlesAsync(5, Arg.Any<CancellationToken>())
             .Returns(articles);
 
-        _postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Wykop, Arg.Any<IReadOnlyList<NewsArticle>>(), Arg.Any<CancellationToken>())
+        _postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Wykop, articles, Arg.Any<CancellationToken>())
             .Returns("Wykop digest content");
 
         _wykopClient.CreateEntryAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
@@ -126,6 +132,7 @@ public class PublishWykopNewsCommandHandlerTests
             _wykopClient,
             _telegramService,
             _curationOptions,
+            _timeProvider,
             _logger,
             CancellationToken.None);
 

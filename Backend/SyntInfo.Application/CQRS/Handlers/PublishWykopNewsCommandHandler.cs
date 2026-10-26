@@ -16,9 +16,11 @@ public static class PublishWykopNewsCommandHandler
         IWykopClient wykopClient,
         ITelegramNotificationService telegramService,
         IOptions<CurationOptions> curationOptions,
+        TimeProvider timeProvider,
         ILogger<PublishWykopNewsCommand> logger,
         CancellationToken cancellationToken)
     {
+        timeProvider ??= TimeProvider.System;
         var count = command.Count is > 0 ? command.Count.Value : curationOptions.Value.MaxArticlesPerRun;
         logger.LogInformation("Rozpoczęto publikację {Count} wiadomości na Wykopie.", count);
 
@@ -61,10 +63,10 @@ public static class PublishWykopNewsCommandHandler
             var entryId = await wykopClient.CreateEntryAsync(wykopContent, photoKey, cancellationToken);
             logger.LogInformation("Pomyślnie opublikowano wpis na Wykopie o ID: {EntryId}", entryId);
 
+            var publishedAt = timeProvider.GetUtcNow().UtcDateTime;
             foreach (var article in articles)
             {
-                article.DigestPublishedAt = DateTime.UtcNow;
-                uow.NewsArticles.Update(article);
+                article.DigestPublishedAt = publishedAt;
             }
             await uow.SaveChangesAsync(cancellationToken);
 
