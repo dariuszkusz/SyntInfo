@@ -20,20 +20,29 @@ public static class QuartzExtensions
 
             var warsawTimeZone = GetWarsawTimeZone();
 
-            // Odpalanie 2 razy dziennie (7:00 i 19:00 czasu polskiego)
+            // Odpalanie pobierania RSS 2 razy dziennie (6:00 rano przed kuracją oraz 18:00 czasu polskiego)
             q.AddTrigger(opts => opts
                 .ForJob(jobKey)
                 .WithIdentity("RssFetcherJob-trigger")
-                .WithCronSchedule("0 0 7,19 * * ?", x => x.InTimeZone(warsawTimeZone)));
+                .WithCronSchedule("0 0 6,18 * * ?", x => x.InTimeZone(warsawTimeZone)));
 
-            // Odpalanie publikacji/selekcji na platformy społecznościowe raz dziennie o 8:00 (czasu polskiego)
+            // Odpalanie porannej selekcji artykułów na Telegramie o 7:00 rano (czasu polskiego)
             var socialJobKey = new JobKey("SocialCurationJob");
             q.AddJob<SocialCurationJob>(opts => opts.WithIdentity(socialJobKey));
 
             q.AddTrigger(opts => opts
                 .ForJob(socialJobKey)
                 .WithIdentity("SocialCurationJob-trigger")
-                .WithCronSchedule("0 0 8 * * ?", x => x.InTimeZone(warsawTimeZone)));
+                .WithCronSchedule("0 0 7 * * ?", x => x.InTimeZone(warsawTimeZone)));
+
+            // Odpalanie automatycznego fallbacku o 9:00 rano (czasu polskiego), jeśli redaktor nie zareagował
+            var fallbackJobKey = new JobKey("SocialCurationFallbackJob");
+            q.AddJob<SocialCurationFallbackJob>(opts => opts.WithIdentity(fallbackJobKey));
+
+            q.AddTrigger(opts => opts
+                .ForJob(fallbackJobKey)
+                .WithIdentity("SocialCurationFallbackJob-trigger")
+                .WithCronSchedule("0 0 9 * * ?", x => x.InTimeZone(warsawTimeZone)));
         });
 
         services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);

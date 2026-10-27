@@ -37,6 +37,7 @@ try
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ISearchService>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ISocialPostGenerator>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ITelegramNotificationService>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<ITelegramCurationStateService>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<ISocialPublisherFactory>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IWykopClient>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHejtoClient>();
@@ -102,6 +103,7 @@ try
     // Rejestracja modułu automatyzacji Social Media & Telegram (klienci HTTP na podstawie IHttpClientOptions)
     builder.Services.AddConfiguredHttpClients<IConfigurableOptions>();
 
+    builder.Services.AddSingleton<ITelegramCurationStateService, SyntInfo.Infrastructure.Services.TelegramCurationStateService>();
     builder.Services.AddInfrastructureServices();
 
     // Konfiguracja zadań w tle (Quartz)
