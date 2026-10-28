@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine.Attributes;
 
@@ -14,6 +15,7 @@ public static class PublishDigestIssueCommandHandler
         IHejtoClient hejtoClient,
         IMailerLiteClient mailerLiteClient,
         ITelegramNotificationService telegramService,
+        ITelegramCurationStateService telegramState,
         IOptions<CurationOptions> curationOptions,
         IOptions<MailerLiteOptions> mailerLiteOptions,
         ILogger<PublishDigestIssueCommand> logger,
@@ -104,14 +106,29 @@ public static class PublishDigestIssueCommandHandler
             newsletterResult = "⏸️ Wyłączony";
         }
 
-        // 4. Oznaczenie artykułów jako opublikowane w wydaniu
+        // 4. Oznaczenie wybranych artykułów jako opublikowane w wydaniu
+        var selectedIds = selectedArticles.Select(a => a.Id).ToHashSet();
         foreach (var article in selectedArticles)
         {
             article.DigestPublishedAt = DateTime.UtcNow;
             article.IsSelectedForDigest = false;
             uow.NewsArticles.Update(article);
         }
+
+        // 4b. Archiwizacja niewybranych propozycji z bazy, aby nie powracały w kolejnych cyklach kuracji
+        var unselectedArticles = await uow.NewsArticles.Query()
+            .Where(a => a.IsActive && a.DigestPublishedAt == null && !selectedIds.Contains(a.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var unselected in unselectedArticles)
+        {
+            unselected.DigestPublishedAt = DateTime.UtcNow;
+            unselected.IsSelectedForDigest = false;
+            uow.NewsArticles.Update(unselected);
+        }
+
         await uow.SaveChangesAsync(cancellationToken);
+        telegramState.Clear();
 
         // 5. Raport końcowy na Telegramie
         var summaryReport = $"🗞️ <b>Raport z publikacji wydania InfoSkrót ({selectedArticles.Count} artykułów)</b>\n\n" +

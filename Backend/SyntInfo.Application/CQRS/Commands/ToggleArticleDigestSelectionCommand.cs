@@ -6,4 +6,5 @@ namespace SyntInfo.Application.CQRS.Commands;
 public record ToggleArticleDigestSelectionCommand(
     Guid ArticleId,
     long? TelegramChatId = null,
-    long? TelegramMessageId = null);
+    long? TelegramMessageId = null,
+    string? CallbackQueryId = null);

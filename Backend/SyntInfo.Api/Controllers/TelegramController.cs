@@ -80,8 +80,13 @@ public class TelegramController : ControllerBase
             var data = callback.Data ?? string.Empty;
             _logger.LogInformation("Odebrano CallbackQuery z Telegrama: Data='{Data}', From='{User}'", data, callback.From.Username);
 
-            // Odpowiedz botowi na Telegramie, aby zdjąć stan ładowania przycisku
-            if (!_telegramOptions.UseMock)
+            var parts = data.Split(':', 2);
+            var action = parts[0].ToLowerInvariant();
+            var chatId = callback.Message?.Chat.Id;
+            var messageId = callback.Message?.Id;
+
+            // Odpowiedz botowi na Telegramie, aby zdjąć stan ładowania przycisku (z wyjątkiem curate_toggle, gdzie odpowiedź wysyła dedykowany handler)
+            if (!_telegramOptions.UseMock && action != "curate_toggle")
             {
                 try
                 {
@@ -93,11 +98,6 @@ public class TelegramController : ControllerBase
                 }
             }
 
-            var parts = data.Split(':', 2);
-            var action = parts[0].ToLowerInvariant();
-            var chatId = callback.Message?.Chat.Id;
-            var messageId = callback.Message?.Id;
-
             if (action == "digest_publish")
             {
                 _logger.LogInformation("Wyzwalanie publikacji wydania InfoSkrót z poziomu Telegrama.");
@@ -106,7 +106,7 @@ public class TelegramController : ControllerBase
             else if (action == "curate_toggle" && parts.Length == 2 && Guid.TryParse(parts[1], out var articleId))
             {
                 _logger.LogInformation("Przełączanie selekcji artykułu {ArticleId} do wydania.", articleId);
-                await _bus.PublishAsync(new ToggleArticleDigestSelectionCommand(articleId, chatId, messageId));
+                await _bus.PublishAsync(new ToggleArticleDigestSelectionCommand(articleId, chatId, messageId, callback.Id));
             }
             else if (parts.Length == 2 && Guid.TryParse(parts[1], out var draftId))
             {

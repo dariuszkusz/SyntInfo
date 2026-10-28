@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -305,6 +306,255 @@ public class TelegramNotificationService : ITelegramNotificationService
             _logger.LogError(ex, "Błąd wysyłania panelu wydania na Telegram");
             return 0;
         }
+    }
+
+    public async Task<long> SendDigestControlPanelAsync(int polandCount, int worldCount, int positiveCount, CancellationToken cancellationToken = default)
+    {
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        {
+            return Random.Shared.Next(1000, 99999);
+        }
+
+        var text = BuildControlPanelText(polandCount, worldCount, positiveCount);
+        var keyboard = BuildControlPanelMarkup();
+
+        try
+        {
+            var msg = await ExecuteWithRetryAsync(() => client.SendMessage(
+                chatId: new ChatId(chatId),
+                text: text,
+                parseMode: ParseMode.Html,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken), cancellationToken);
+
+            return msg.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd wysyłania panelu wydania na Telegram");
+            return 0;
+        }
+    }
+
+    public async Task UpdateDigestControlPanelAsync(long messageId, int polandCount, int worldCount, int positiveCount, CancellationToken cancellationToken = default)
+    {
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        {
+            return;
+        }
+
+        var text = BuildControlPanelText(polandCount, worldCount, positiveCount);
+        var keyboard = BuildControlPanelMarkup();
+
+        try
+        {
+            await client.EditMessageText(
+                chatId: new ChatId(chatId),
+                messageId: (int)messageId,
+                text: text,
+                parseMode: ParseMode.Html,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się zaktualizować panelu kontrolnego {MessageId}", messageId);
+        }
+    }
+
+    public async Task<long> SendThematicBatchAsync(SourceRegion region, IReadOnlyList<NewsArticle> articles, CancellationToken cancellationToken = default)
+    {
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        {
+            _logger.LogInformation("TelegramNotificationService [MOCK/TEST]: Wysłano zbiorczą partię dla regionu {Region} ({Count} artykułów)", region, articles.Count);
+            return Random.Shared.Next(1000, 99999);
+        }
+
+        var (header, maxLimit) = region switch
+        {
+            SourceRegion.Poland => ("🇵🇱 <b>WYDANIE DNIA — POLSKA</b> (Wybierz maks. 5)", 5),
+            SourceRegion.World => ("🌍 <b>WYDANIE DNIA — ŚWIAT</b> (Wybierz maks. 5)", 5),
+            SourceRegion.Positive => ("☀️ <b>WYDANIE DNIA — POZYTYWNE</b> (Wybierz maks. 3)", 3),
+            _ => ("🗞️ <b>PROPOZYCJE ARTYKUŁÓW</b>", 5)
+        };
+
+        var sb = new StringBuilder();
+        sb.AppendLine(header);
+        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+        for (var i = 0; i < articles.Count; i++)
+        {
+            var art = articles[i];
+            var num = i + 1;
+            var numIcon = num switch
+            {
+                1 => "1️⃣", 2 => "2️⃣", 3 => "3️⃣", 4 => "4️⃣", 5 => "5️⃣",
+                6 => "6️⃣", 7 => "7️⃣", 8 => "8️⃣", 9 => "9️⃣", 10 => "🔟",
+                _ => $"#{num}"
+            };
+
+            var encodedTitle = WebUtility.HtmlEncode(art.Title);
+            var primaryUrl = art.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+            var domain = GetDomain(primaryUrl);
+            var teaser = CleanTeaser(art.SummaryText, 140);
+            var encodedTeaser = WebUtility.HtmlEncode(teaser);
+
+            sb.AppendLine($"{numIcon} <b>{encodedTitle}</b>");
+            sb.AppendLine($"   🔗 <a href=\"{primaryUrl}\">{domain}</a> • <i>{encodedTeaser}</i>");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sb.AppendLine($"<i>Kliknij numer poniżej, aby wybrać (maks. {maxLimit})</i>");
+
+        var text = sb.ToString();
+        if (text.Length > 4000)
+        {
+            text = text[..3950] + "\n\n<i>[...skrócono listę...]</i>";
+        }
+
+        var keyboard = BuildThematicMarkup(articles);
+
+        try
+        {
+            var msg = await ExecuteWithRetryAsync(() => client.SendMessage(
+                chatId: new ChatId(chatId),
+                text: text,
+                parseMode: ParseMode.Html,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken), cancellationToken);
+
+            return msg.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd wysyłania zbiorczej partii {Region} na Telegram", region);
+            return 0;
+        }
+    }
+
+    public async Task UpdateThematicBatchMarkupAsync(long messageId, SourceRegion region, IReadOnlyList<NewsArticle> articles, CancellationToken cancellationToken = default)
+    {
+        var chatIdStr = _telegramOptions.AdminChatId;
+        var isMock = _telegramOptions.UseMock;
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        {
+            return;
+        }
+
+        var keyboard = BuildThematicMarkup(articles);
+
+        try
+        {
+            await client.EditMessageReplyMarkup(
+                chatId: new ChatId(chatId),
+                messageId: (int)messageId,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się zaktualizować klawiatury dla partii tematycznej {MessageId}", messageId);
+        }
+    }
+
+    public async Task AnswerCallbackQueryAsync(string callbackQueryId, string? text = null, bool showAlert = false, CancellationToken cancellationToken = default)
+    {
+        var isMock = _telegramOptions.UseMock;
+        var client = ResolveClient();
+
+        if (isMock || client == null || string.IsNullOrWhiteSpace(callbackQueryId))
+        {
+            return;
+        }
+
+        try
+        {
+            await client.AnswerCallbackQuery(callbackQueryId, text, showAlert: showAlert, cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się odpowiedzieć na CallbackQuery {Id}", callbackQueryId);
+        }
+    }
+
+    private static InlineKeyboardMarkup BuildThematicMarkup(IReadOnlyList<NewsArticle> articles)
+    {
+        var buttons = new List<InlineKeyboardButton>();
+        for (var i = 0; i < articles.Count; i++)
+        {
+            var num = i + 1;
+            var isSel = articles[i].IsSelectedForDigest;
+            var text = isSel ? $"✅ {num}" : $"{num}";
+            buttons.Add(InlineKeyboardButton.WithCallbackData(text, $"curate_toggle:{articles[i].Id}"));
+        }
+
+        // Podział przycisków na wiersze po 5
+        var rows = buttons.Chunk(5).Select(chunk => chunk.ToArray()).ToArray();
+        return new InlineKeyboardMarkup(rows);
+    }
+
+    private static string BuildControlPanelText(int polandCount, int worldCount, int positiveCount)
+    {
+        var total = polandCount + worldCount + positiveCount;
+        return "📊 <b>PANEL STEROWANIA WYDANIA INFOSKRÓT</b>\n" +
+               "━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+               $"🇵🇱 <b>Polska:</b> {polandCount} / 5 wybrano\n" +
+               $"🌍 <b>Świat:</b> {worldCount} / 5 wybrano\n" +
+               $"☀️ <b>Pozytywne:</b> {positiveCount} / 3 wybrano\n\n" +
+               $"Razem zakwalifikowano: <b>{total}</b> artykułów\n" +
+               "━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+               "Wybierz numery artykułów w wiadomościach powyżej.\n" +
+               "Gdy skończysz selekcję, kliknij przycisk poniżej, aby zatwierdzić i opublikować wydanie:";
+    }
+
+    private static InlineKeyboardMarkup BuildControlPanelMarkup()
+    {
+        return new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("🚀 ZATWIERDŹ I PUBLIKUJ WYDANIE", "digest_publish") }
+        });
+    }
+
+    private static string GetDomain(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var host = uri.Host;
+            return host.StartsWith("www.") ? host[4..] : host;
+        }
+        catch
+        {
+            return "źródło";
+        }
+    }
+
+    private static string CleanTeaser(string text, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var singleLine = text.Replace("\r", " ").Replace("\n", " ").Trim();
+        while (singleLine.Contains("  "))
+        {
+            singleLine = singleLine.Replace("  ", " ");
+        }
+
+        if (singleLine.Length <= maxLength) return singleLine;
+        return singleLine[..maxLength].TrimEnd() + "...";
     }
 
     public async Task<long> SendSimpleNotificationAsync(string message, CancellationToken cancellationToken = default)

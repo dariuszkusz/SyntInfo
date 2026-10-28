@@ -29,8 +29,33 @@ public interface ITelegramNotificationService
     Task<long> SendDigestControlPanelAsync(int selectedCount, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Wysyła panel kontrolny wydania z podziałem na wybrane artykuły z poszczególnych regionów (Polska, Świat, Pozytywne).
+    /// </summary>
+    Task<long> SendDigestControlPanelAsync(int polandCount, int worldCount, int positiveCount, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Aktualizuje panel kontrolny wydania z nowymi licznikami po zmianie selekcji artykułów.
+    /// </summary>
+    Task UpdateDigestControlPanelAsync(long messageId, int polandCount, int worldCount, int positiveCount, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Wysyła zbiorczą wiadomość z listą artykułów dla danego regionu wraz z klawiaturą numeryczną.
+    /// </summary>
+    Task<long> SendThematicBatchAsync(SourceRegion region, IReadOnlyList<NewsArticle> articles, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Aktualizuje klawiaturę numeryczną wiadomości zbiorczej dla danego regionu po zmianie selekcji.
+    /// </summary>
+    Task UpdateThematicBatchMarkupAsync(long messageId, SourceRegion region, IReadOnlyList<NewsArticle> articles, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Wysyła prostą wiadomość tekstową (raport lub powiadomienie) do administratora.
     /// </summary>
     Task<long> SendSimpleNotificationAsync(string message, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Odpowiada na zapytanie zwrotne (CallbackQuery) z Telegrama (np. powiadomienie lub alert przy przekroczeniu limitu).
+    /// </summary>
+    Task AnswerCallbackQueryAsync(string callbackQueryId, string? text = null, bool showAlert = false, CancellationToken cancellationToken = default);
 }
 

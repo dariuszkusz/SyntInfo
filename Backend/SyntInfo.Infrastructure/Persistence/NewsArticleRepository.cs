@@ -52,6 +52,30 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<NewsArticle>> GetArticlesForCurationByRegionAsync(SourceRegion region, int limit, CancellationToken cancellationToken = default)
+    {
+        return await _db.NewsArticles
+            .Where(a => a.IsActive 
+                     && a.Region == region
+                     && a.DigestPublishedAt == null
+                     && a.SummaryText.Length >= 40 
+                     && !a.Title.Contains("Brak faktów")
+                     && !a.Title.Contains("Brak danych")
+                     && !a.SummaryText.Contains("User Safety")
+                     && !a.SummaryText.Contains("safety filter")
+                     && !a.SummaryText.Contains("Brak faktów")
+                     && !a.SummaryText.Contains("Nie podano danych"))
+            .OrderByDescending(a => a.PublishedAt)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<bool> HasDigestBeenPublishedSinceAsync(DateTime sinceUtc, CancellationToken cancellationToken = default)
+    {
+        return await _db.NewsArticles
+            .AnyAsync(a => a.DigestPublishedAt != null && a.DigestPublishedAt >= sinceUtc, cancellationToken);
+    }
+
     public async Task<List<NewsArticle>> GetRecentArticlesAsync(SourceRegion? region, int page, int pageSize, CancellationToken cancellationToken = default)
     {
         var cutoffDate = DateTime.UtcNow.AddHours(-24);
