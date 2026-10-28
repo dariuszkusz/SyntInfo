@@ -6,6 +6,7 @@ public class GoogleAiStudioOptions : IConfigurableOptions
     string IConfigurableOptions.SectionName => SectionName;
 
     public string ApiKey { get; set; } = string.Empty;
-    public string Model { get; set; } = "gemini-2.5-flash";
+    public string Model { get; set; } = "gemini-3.5-flash";
+    public string FallbackModel { get; set; } = "gemini-3.1-flash-lite";
 }
 

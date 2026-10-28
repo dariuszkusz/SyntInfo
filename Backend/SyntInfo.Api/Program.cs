@@ -72,7 +72,7 @@ try
 
     builder.Services.AddHttpClient<ISearchService, SyntInfo.Infrastructure.Services.TavilySearchService>(client =>
     {
-        client.Timeout = TimeSpan.FromMinutes(10);
+        client.Timeout = TimeSpan.FromSeconds(60);
     });
     builder.Services.AddHttpClient<INewsDiscoveryService, SyntInfo.Infrastructure.Services.TavilyNewsDiscoveryService>(client =>
     {
@@ -89,12 +89,12 @@ try
     builder.Services.AddHttpClient<IOpenRouterClient, SyntInfo.Infrastructure.Services.OpenRouterClient>(client =>
     {
         client.BaseAddress = new Uri(builder.Configuration["OpenRouter:BaseUrl"] ?? "https://openrouter.ai/api/v1/");
-        client.Timeout = TimeSpan.FromMinutes(10);
+        client.Timeout = TimeSpan.FromSeconds(60);
     });
 
     builder.Services.AddHttpClient<IGoogleAiStudioClient, SyntInfo.Infrastructure.Services.GoogleAiStudioClient>(client =>
     {
-        client.Timeout = TimeSpan.FromMinutes(10);
+        client.Timeout = TimeSpan.FromSeconds(60);
     });
 
     // Pamięć podręczna (dla tokenów OAuth2 Hejto itp.)
