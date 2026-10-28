@@ -110,13 +110,19 @@ public class OpenRouterClient : IOpenRouterClient
             }
             catch (Exception ex)
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+
                 bool isRateLimit = ex is HttpRequestException hrex && hrex.StatusCode == System.Net.HttpStatusCode.TooManyRequests;
                 bool isTimeout = ex.Message.Contains("Timeout") || ex is TaskCanceledException;
+                bool isUnusableModel = ex.Message.Contains("404") || ex.Message.Contains("guardrail") || ex.Message.Contains("violation");
 
                 _logger.LogWarning("Błąd modelu {Model} (Próba {Current}/{Max}): {Error}", currentModel, i + 1, maxRetries + 1, ex.Message);
 
-                // Jesli to ostatnia proba lub powazny blad, a nie jestesmy jeszcze na fallbacku - przelacz na fallback
-                if ((i >= 1 || isTimeout) && currentModel != _fallbackModel)
+                // Jesli to powazny blad, timeout, guardrail lub kolejna proba, a nie jestesmy jeszcze na fallbacku - przelacz na fallback
+                if ((i >= 1 || isTimeout || isUnusableModel) && currentModel != _fallbackModel)
                 {
                     _logger.LogWarning("Przełączanie na model Fallback: {FallbackModel}", _fallbackModel);
                     currentModel = _fallbackModel;

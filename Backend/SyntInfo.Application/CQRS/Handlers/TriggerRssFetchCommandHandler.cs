@@ -188,11 +188,18 @@ public class TriggerRssFetchCommandHandler
 
         foreach (var region in Enum.GetValues<SourceRegion>())
         {
-            var candidatesForRegion = clusteredCandidates.Where(a => a.Region == region).ToList();
-            var limit = region == SourceRegion.Positive ? _options.MaxPositiveArticles : _options.MaxArticlesPerRegion;
+            try
+            {
+                var candidatesForRegion = clusteredCandidates.Where(a => a.Region == region).ToList();
+                var limit = region == SourceRegion.Positive ? _options.MaxPositiveArticles : _options.MaxArticlesPerRegion;
 
-            var selected = await GetCommandsToExecuteAsync(region, candidatesForRegion, limit, cancellationToken);
-            commands.AddRange(selected);
+                var selected = await GetCommandsToExecuteAsync(region, candidatesForRegion, limit, cancellationToken);
+                commands.AddRange(selected);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Nieobsłużony błąd podczas selekcji artykułów dla regionu {Region}", region);
+            }
         }
 
         return commands;
@@ -296,6 +303,7 @@ public class TriggerRssFetchCommandHandler
                     return commandsToExecute;
                 }
 
+                _logger.LogWarning("Brak wybranych indeksów przez AI dla regionu {Region}. Fallback logiczny: wybór {Count} najnowszych artykułów.", region, Math.Min(limitedNewCandidates.Count, maxPerRegion));
                 commandsToExecute.AddRange(limitedNewCandidates.Take(maxPerRegion));
                 return commandsToExecute;
             }
@@ -313,6 +321,14 @@ public class TriggerRssFetchCommandHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Błąd w GetCommandsToExecuteAsync dla regionu {Region}", region);
+
+            if (region != SourceRegion.Positive && newCandidates != null && newCandidates.Any())
+            {
+                var fallbackCount = Math.Min(newCandidates.Count, maxPerRegion);
+                _logger.LogWarning("Uruchomiono bezpieczny fallback logiczny dla regionu {Region}: wybór {Count} najświeższych artykułów.", region, fallbackCount);
+                return newCandidates.OrderByDescending(c => c.PublishedAt).Take(maxPerRegion).ToList();
+            }
+
             return commandsToExecute;
         }
     }
