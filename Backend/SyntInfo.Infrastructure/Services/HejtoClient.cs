@@ -26,7 +26,106 @@ public class HejtoClient : IHejtoClient
         _logger = logger;
     }
 
-    public async Task<string> CreatePostAsync(string content, string? communitySlug = null, CancellationToken cancellationToken = default)
+    public async Task<string?> UploadImageAsync(string imageUrlOrPath, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrlOrPath))
+        {
+            return null;
+        }
+
+        var isMock = _hejtoOptions.UseMock;
+        string? accessToken = null;
+        try
+        {
+            accessToken = await GetOrRefreshTokenAsync(cancellationToken);
+        }
+        catch (Exception ex) when (isMock)
+        {
+            _logger.LogWarning(ex, "HejtoClient: Błąd autoryzacji OAuth2 podczas uploadu zdjęcia, lecz włączony jest tryb UseMock.");
+        }
+
+        if (isMock || string.IsNullOrWhiteSpace(accessToken) || accessToken.Contains("PLACEHOLDER"))
+        {
+            _logger.LogInformation("HejtoClient [MOCK/TEST]: Przesyłanie obrazka do Hejto ({ImageUrl})", imageUrlOrPath);
+            return $"hejto-mock-img-{Guid.NewGuid():N}"[..24];
+        }
+
+        try
+        {
+            byte[] imageBytes;
+            var fileName = "image.jpg";
+
+            if (imageUrlOrPath.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                imageUrlOrPath.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                var downloadClient = _httpClientFactory.CreateClient();
+                imageBytes = await downloadClient.GetByteArrayAsync(imageUrlOrPath, cancellationToken);
+                var uri = new Uri(imageUrlOrPath);
+                var lastSegment = Path.GetFileName(uri.LocalPath);
+                if (!string.IsNullOrWhiteSpace(lastSegment) && lastSegment.Contains('.'))
+                {
+                    fileName = lastSegment;
+                }
+            }
+            else if (File.Exists(imageUrlOrPath))
+            {
+                imageBytes = await File.ReadAllBytesAsync(imageUrlOrPath, cancellationToken);
+                fileName = Path.GetFileName(imageUrlOrPath);
+            }
+            else
+            {
+                _logger.LogWarning("Nieprawidłowa ścieżka lub URL obrazka dla Hejto: {Path}", imageUrlOrPath);
+                return null;
+            }
+
+            var mediaType = GetMediaType(fileName);
+            var baseUrl = _hejtoOptions.BaseUrl;
+            if (!baseUrl.EndsWith("/")) baseUrl += "/";
+
+            var client = _httpClientFactory.CreateClient("HejtoClient");
+            using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "uploads?target=post&source=file"));
+            uploadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            uploadRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            using var form = new MultipartFormDataContent();
+            var byteContent = new ByteArrayContent(imageBytes);
+            byteContent.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+            form.Add(byteContent, "image", fileName);
+            uploadRequest.Content = form;
+
+            using var uploadResponse = await client.SendAsync(uploadRequest, cancellationToken);
+            if (!uploadResponse.IsSuccessStatusCode)
+            {
+                var err = await uploadResponse.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Nie udało się przesłać obrazka do Hejto (HTTP {StatusCode}): {Error}", uploadResponse.StatusCode, err);
+                return null;
+            }
+
+            var responseJson = await uploadResponse.Content.ReadAsStringAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(responseJson))
+            {
+                using var doc = JsonDocument.Parse(responseJson);
+                if (doc.RootElement.TryGetProperty("uuid", out var uuidEl))
+                {
+                    var uuid = uuidEl.GetString();
+                    _logger.LogInformation("Pomyślnie przesłano obrazek do Hejto. UUID: {Uuid}", uuid);
+                    return uuid;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Wystąpił błąd podczas przesyłania obrazka do Hejto: {Url}", imageUrlOrPath);
+        }
+
+        return null;
+    }
+
+    public async Task<string> CreatePostAsync(
+        string content,
+        string? communitySlug = null,
+        string? imageUuid = null,
+        CancellationToken cancellationToken = default)
     {
         var targetCommunity = communitySlug ?? _hejtoOptions.DefaultCommunity;
         var isMock = _hejtoOptions.UseMock;
@@ -43,9 +142,12 @@ public class HejtoClient : IHejtoClient
 
         if (isMock || string.IsNullOrWhiteSpace(accessToken) || accessToken.Contains("PLACEHOLDER"))
         {
-            _logger.LogInformation("HejtoClient [MOCK/TEST]: Publikowanie wpisu na Hejto (Społeczność: {Community}, Długość: {Length})",
-                targetCommunity, content.Length);
-            return $"hejto-mock-{Guid.NewGuid():N}[..8]";
+            _logger.LogInformation(
+                "HejtoClient [MOCK/TEST]: Publikowanie wpisu na Hejto (Społeczność: {Community}, Długość: {Length}, ImageUuid: {ImageUuid})",
+                targetCommunity,
+                content.Length,
+                imageUuid ?? "brak");
+            return $"hejto-mock-{Guid.NewGuid():N}"[..16];
         }
 
         // Hejto wymaga co najmniej jednego tagu (#tag) w treści wpisu
@@ -62,12 +164,34 @@ public class HejtoClient : IHejtoClient
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(baseUrl), "posts"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Content = JsonContent.Create(new
+
+        if (!string.IsNullOrWhiteSpace(imageUuid))
         {
-            content = finalContent,
-            community = targetCommunity,
-            type = "discussion"
-        });
+            request.Content = JsonContent.Create(new
+            {
+                content = finalContent,
+                community = targetCommunity,
+                type = "discussion",
+                images = new[]
+                {
+                    new
+                    {
+                        uuid = imageUuid,
+                        position = 1
+                    }
+                },
+                nsfw = false
+            });
+        }
+        else
+        {
+            request.Content = JsonContent.Create(new
+            {
+                content = finalContent,
+                community = targetCommunity,
+                type = "discussion"
+            });
+        }
 
         using var response = await client.SendAsync(request, cancellationToken);
 
@@ -104,6 +228,18 @@ public class HejtoClient : IHejtoClient
         }
 
         return "hejto-post-published";
+    }
+
+    private static string GetMediaType(string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            _ => "image/jpeg"
+        };
     }
 
     private async Task<string?> GetOrRefreshTokenAsync(CancellationToken cancellationToken)
