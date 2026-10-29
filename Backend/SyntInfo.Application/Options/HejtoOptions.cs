@@ -15,4 +15,6 @@ public class HejtoOptions : IConfigurableOptions, IHttpClientOptions
     public string DefaultCommunity { get; set; } = "wiadomosci-polska";
     public string? Token { get; set; }
     public bool UseMock { get; set; }
+    public bool PublishArticlesSeparately { get; set; } = true;
+    public int DelayBetweenPostsMs { get; set; } = 1500;
 }

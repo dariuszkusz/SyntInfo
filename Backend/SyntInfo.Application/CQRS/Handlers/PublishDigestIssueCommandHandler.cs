@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SyntInfo.Application.CQRS.Commands;
+using Wolverine;
 using Wolverine.Attributes;
 
 namespace SyntInfo.Application.CQRS.Handlers;
@@ -10,6 +11,7 @@ public static class PublishDigestIssueCommandHandler
     public static async Task Handle(
         PublishDigestIssueCommand command,
         IUnitOfWork uow,
+        IMessageBus bus,
         ISocialPostGenerator postGenerator,
         IWykopClient wykopClient,
         IHejtoClient hejtoClient,
@@ -17,6 +19,7 @@ public static class PublishDigestIssueCommandHandler
         ITelegramNotificationService telegramService,
         ITelegramCurationStateService telegramState,
         IOptions<CurationOptions> curationOptions,
+        IOptions<HejtoOptions> hejtoOptions,
         IOptions<MailerLiteOptions> mailerLiteOptions,
         ILogger<PublishDigestIssueCommand> logger,
         CancellationToken cancellationToken)
@@ -69,12 +72,33 @@ public static class PublishDigestIssueCommandHandler
             wykopResult = $"❌ Błąd: {ex.Message}";
         }
 
-        // 2. Publikacja na Hejto
+        // 2. Publikacja na Hejto (przełączalne: osobno z załącznikami przez nowy Command vs poprzednie wydanie zbiorcze)
         try
         {
-            var hejtoContent = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Hejto, selectedArticles, cancellationToken);
-            var postId = await hejtoClient.CreatePostAsync(hejtoContent, null, cancellationToken);
-            hejtoResult = $"✅ Wpis dodany (ID: {postId})";
+            if (hejtoOptions.Value.PublishArticlesSeparately)
+            {
+                var articleIds = selectedArticles.Select(a => a.Id).ToList();
+                var separateResult = await bus.InvokeAsync<PublishHejtoArticlesSeparatelyResult>(
+                    new PublishHejtoArticlesSeparatelyCommand(ArticleIds: articleIds),
+                    cancellationToken);
+
+                if (separateResult.Success)
+                {
+                    var idsPreview = string.Join(", ", separateResult.PostIds);
+                    hejtoResult = $"✅ Opublikowano osobno {separateResult.PublishedCount}/{separateResult.TotalArticlesCount} wpisów (ID: {idsPreview})";
+                }
+                else
+                {
+                    hejtoResult = $"❌ Błąd publikacji osobnej: {separateResult.Error ?? separateResult.Message}";
+                }
+            }
+            else
+            {
+                // Poprzednie rozwiązanie (zbiorczy wpis InfoSkrót) — zachowane do szybkiego powrotu
+                var hejtoContent = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Hejto, selectedArticles, cancellationToken);
+                var postId = await hejtoClient.CreatePostAsync(hejtoContent, null, null, cancellationToken);
+                hejtoResult = $"✅ Wpis dodany (ID: {postId})";
+            }
         }
         catch (Exception ex)
         {
