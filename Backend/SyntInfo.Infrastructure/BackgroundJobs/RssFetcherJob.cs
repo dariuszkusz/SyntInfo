@@ -18,14 +18,26 @@ public class RssFetcherJob : IJob
 
     public async Task Execute(IJobExecutionContext context)
     {
-        _logger.LogInformation("Wyzwalanie procesów tła (RSS + Cleanup) {Time}", DateTime.UtcNow);
+        _logger.LogInformation("Wyzwalanie procesów tła (RSS + Cleanup + Kuracja Telegram) {Time}", DateTime.UtcNow);
 
         context.CancellationToken.ThrowIfCancellationRequested();
-        // 1. Pobieranie nowych newsów
-        await _bus.PublishAsync(new TriggerRssFetchCommand());
+        // 1. Pobieranie nowych newsów i pełne opracowanie przez AI (oczekiwanie na zakończenie syntezy)
+        await _bus.InvokeAsync(new TriggerRssFetchCommand(), context.CancellationToken);
 
         context.CancellationToken.ThrowIfCancellationRequested();
         // 2. Usuwanie starych newsów (starszych niż 7 dni)
         await _bus.PublishAsync(new CleanupOldArticlesCommand(DaysToKeep: 7));
+
+        context.CancellationToken.ThrowIfCancellationRequested();
+        // 3. Wysłanie powiadomienia do redaktora na Telegram dopiero po pełnym opracowaniu artykułów
+        var result = await _bus.InvokeAsync<SendCurationBatchResult>(
+            new SendCurationBatchCommand(),
+            context.CancellationToken);
+
+        _logger.LogInformation(
+            "Zakończono proces SendCurationBatch po opracowaniu artykułów. Sukces: {Success}, Wysłano artykułów: {Count}, Komunikat: {Message}",
+            result?.Success ?? false,
+            result?.SentCount ?? 0,
+            result?.Message);
     }
 }

@@ -12,22 +12,25 @@ public class RssFetcherJobTests
     private readonly IJobExecutionContext _context = Substitute.For<IJobExecutionContext>();
 
     [Fact]
-    public async Task Execute_WhenNotCancelled_PublishesTriggerRssFetchAndCleanupCommands()
+    public async Task Execute_WhenNotCancelled_InvokesRssFetchCleanupAndCurationBatchSequentially()
     {
         // Arrange
         _context.CancellationToken.Returns(CancellationToken.None);
+        _bus.InvokeAsync<SendCurationBatchResult>(Arg.Any<SendCurationBatchCommand>(), Arg.Any<CancellationToken>())
+            .Returns(new SendCurationBatchResult(true, 30, "OK"));
         var job = new RssFetcherJob(_logger, _bus);
 
         // Act
         await job.Execute(_context);
 
         // Assert
-        await _bus.Received(1).PublishAsync(Arg.Any<TriggerRssFetchCommand>());
+        await _bus.Received(1).InvokeAsync(Arg.Any<TriggerRssFetchCommand>(), Arg.Any<CancellationToken>());
         await _bus.Received(1).PublishAsync(Arg.Is<CleanupOldArticlesCommand>(c => c.DaysToKeep == 7));
+        await _bus.Received(1).InvokeAsync<SendCurationBatchResult>(Arg.Any<SendCurationBatchCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Execute_WhenCancelledInitially_ThrowsOperationCanceledExceptionAndDoesNotPublish()
+    public async Task Execute_WhenCancelledInitially_ThrowsOperationCanceledExceptionAndDoesNotInvoke()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
@@ -41,22 +44,23 @@ public class RssFetcherJobTests
 
         // Assert
         await act.Should().ThrowAsync<OperationCanceledException>();
-        await _bus.DidNotReceive().PublishAsync(Arg.Any<TriggerRssFetchCommand>());
+        await _bus.DidNotReceive().InvokeAsync(Arg.Any<TriggerRssFetchCommand>(), Arg.Any<CancellationToken>());
         await _bus.DidNotReceive().PublishAsync(Arg.Any<CleanupOldArticlesCommand>());
+        await _bus.DidNotReceive().InvokeAsync<SendCurationBatchResult>(Arg.Any<SendCurationBatchCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Execute_WhenCancelledAfterFirstPublish_ThrowsOperationCanceledExceptionAndDoesNotPublishCleanup()
+    public async Task Execute_WhenCancelledAfterRssFetch_ThrowsOperationCanceledExceptionAndDoesNotSendCurationNotification()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
         _context.CancellationToken.Returns(cts.Token);
 
-        _bus.PublishAsync(Arg.Any<TriggerRssFetchCommand>())
+        _bus.InvokeAsync(Arg.Any<TriggerRssFetchCommand>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 cts.Cancel();
-                return ValueTask.CompletedTask;
+                return Task.CompletedTask;
             });
 
         var job = new RssFetcherJob(_logger, _bus);
@@ -66,7 +70,8 @@ public class RssFetcherJobTests
 
         // Assert
         await act.Should().ThrowAsync<OperationCanceledException>();
-        await _bus.Received(1).PublishAsync(Arg.Any<TriggerRssFetchCommand>());
+        await _bus.Received(1).InvokeAsync(Arg.Any<TriggerRssFetchCommand>(), Arg.Any<CancellationToken>());
         await _bus.DidNotReceive().PublishAsync(Arg.Any<CleanupOldArticlesCommand>());
+        await _bus.DidNotReceive().InvokeAsync<SendCurationBatchResult>(Arg.Any<SendCurationBatchCommand>(), Arg.Any<CancellationToken>());
     }
 }

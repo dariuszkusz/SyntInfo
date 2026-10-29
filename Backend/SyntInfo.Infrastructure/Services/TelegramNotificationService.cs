@@ -11,14 +11,17 @@ public class TelegramNotificationService : ITelegramNotificationService
 {
     private readonly ITelegramBotClient? _botClient;
     private readonly TelegramOptions _telegramOptions;
+    private readonly CurationOptions _curationOptions;
     private readonly ILogger<TelegramNotificationService> _logger;
 
     public TelegramNotificationService(
         IOptions<TelegramOptions> telegramOptions,
         ILogger<TelegramNotificationService> logger,
+        IOptions<CurationOptions>? curationOptions = null,
         ITelegramBotClient? botClient = null)
     {
         _telegramOptions = telegramOptions.Value;
+        _curationOptions = curationOptions?.Value ?? new CurationOptions();
         _logger = logger;
         _botClient = botClient;
     }
@@ -382,12 +385,13 @@ public class TelegramNotificationService : ITelegramNotificationService
             return Random.Shared.Next(1000, 99999);
         }
 
-        var (header, maxLimit) = region switch
+        var maxLimit = _curationOptions.GetMaxSelectionLimit(region);
+        var header = region switch
         {
-            SourceRegion.Poland => ("🇵🇱 <b>WYDANIE DNIA — POLSKA</b> (Wybierz maks. 5)", 5),
-            SourceRegion.World => ("🌍 <b>WYDANIE DNIA — ŚWIAT</b> (Wybierz maks. 5)", 5),
-            SourceRegion.Positive => ("☀️ <b>WYDANIE DNIA — POZYTYWNE</b> (Wybierz maks. 3)", 3),
-            _ => ("🗞️ <b>PROPOZYCJE ARTYKUŁÓW</b>", 5)
+            SourceRegion.Poland => $"🇵🇱 <b>WYDANIE DNIA — POLSKA</b> (Wybierz maks. {maxLimit})",
+            SourceRegion.World => $"🌍 <b>WYDANIE DNIA — ŚWIAT</b> (Wybierz maks. {maxLimit})",
+            SourceRegion.Positive => $"☀️ <b>WYDANIE DNIA — POZYTYWNE</b> (Wybierz maks. {maxLimit})",
+            _ => "🗞️ <b>PROPOZYCJE ARTYKUŁÓW</b>"
         };
 
         var sb = new StringBuilder();
@@ -508,14 +512,14 @@ public class TelegramNotificationService : ITelegramNotificationService
         return new InlineKeyboardMarkup(rows);
     }
 
-    private static string BuildControlPanelText(int polandCount, int worldCount, int positiveCount)
+    private string BuildControlPanelText(int polandCount, int worldCount, int positiveCount)
     {
         var total = polandCount + worldCount + positiveCount;
         return "📊 <b>PANEL STEROWANIA WYDANIA INFOSKRÓT</b>\n" +
                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-               $"🇵🇱 <b>Polska:</b> {polandCount} / 5 wybrano\n" +
-               $"🌍 <b>Świat:</b> {worldCount} / 5 wybrano\n" +
-               $"☀️ <b>Pozytywne:</b> {positiveCount} / 3 wybrano\n\n" +
+               $"🇵🇱 <b>Polska:</b> {polandCount} / {_curationOptions.MaxPolandArticles} wybrano\n" +
+               $"🌍 <b>Świat:</b> {worldCount} / {_curationOptions.MaxWorldArticles} wybrano\n" +
+               $"☀️ <b>Pozytywne:</b> {positiveCount} / {_curationOptions.MaxPositiveArticles} wybrano\n\n" +
                $"Razem zakwalifikowano: <b>{total}</b> artykułów\n" +
                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
                "Wybierz numery artykułów w wiadomościach powyżej.\n" +
@@ -586,4 +590,3 @@ public class TelegramNotificationService : ITelegramNotificationService
         }
     }
 }
-
