@@ -126,16 +126,15 @@ public class TelegramController : ControllerBase
         return Ok();
     }
 
-
     /// <summary>
     /// Ręczne wyzwolenie wysyłki partii artykułów do selekcji i publikacji na platformy społecznościowe.
     /// Deleguje logikę do handlera CQRS (SendCurationBatchCommandHandler).
     /// </summary>
     [HttpPost("trigger-drafts")]
-    public async Task<IActionResult> TriggerDrafts([FromQuery] int? count = null, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> TriggerDrafts(CancellationToken cancellationToken = default)
     {
         var result = await _bus.InvokeAsync<SendCurationBatchResult>(
-            new SendCurationBatchCommand(count),
+            new SendCurationBatchCommand(),
             cancellationToken);
 
         return Ok(result);
@@ -209,17 +208,12 @@ public class TelegramController : ControllerBase
     /// Deleguje logikę do handlera CQRS (SendCurationBatchCommandHandler).
     /// </summary>
     [HttpPost("send-curation-batch")]
-    public async Task<IActionResult> SendCurationBatch(
-        [FromQuery] int? count = null,
-        CancellationToken cancellationToken = default)
+    public async Task<IActionResult> SendCurationBatch(CancellationToken cancellationToken = default)
     {
         var result = await _bus.InvokeAsync<SendCurationBatchResult>(
-            new SendCurationBatchCommand(count),
+            new SendCurationBatchCommand(),
             cancellationToken);
 
         return Ok(result);
     }
 }
-
-
-

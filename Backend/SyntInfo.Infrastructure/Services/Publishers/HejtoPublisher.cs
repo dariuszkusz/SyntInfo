@@ -17,7 +17,13 @@ public class HejtoPublisher : ISocialPlatformPublisher
     {
         try
         {
-            var postId = await _hejtoClient.CreatePostAsync(draft.Content, null, cancellationToken);
+            string? imageUuid = null;
+            if (!string.IsNullOrWhiteSpace(article.ImageUrl))
+            {
+                imageUuid = await _hejtoClient.UploadImageAsync(article.ImageUrl, cancellationToken);
+            }
+
+            var postId = await _hejtoClient.CreatePostAsync(draft.Content, null, imageUuid, cancellationToken);
             return PublishResult.Succeeded(postId);
         }
         catch (Exception ex)

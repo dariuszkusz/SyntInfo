@@ -18,7 +18,7 @@ public class SendCurationBatchCommandHandlerTests
     {
         ProposalPolandCount = 10,
         ProposalWorldCount = 10,
-        ProposalPositiveCount = 6
+        ProposalPositiveCount = 10
     });
 
     public SendCurationBatchCommandHandlerTests()
@@ -36,7 +36,7 @@ public class SendCurationBatchCommandHandlerTests
 
         _articleRepo.GetArticlesForCurationByRegionAsync(SourceRegion.Poland, 10, Arg.Any<CancellationToken>()).Returns(polandList);
         _articleRepo.GetArticlesForCurationByRegionAsync(SourceRegion.World, 10, Arg.Any<CancellationToken>()).Returns(worldList);
-        _articleRepo.GetArticlesForCurationByRegionAsync(SourceRegion.Positive, 6, Arg.Any<CancellationToken>()).Returns(positiveList);
+        _articleRepo.GetArticlesForCurationByRegionAsync(SourceRegion.Positive, 10, Arg.Any<CancellationToken>()).Returns(positiveList);
 
         _telegramService.SendThematicBatchAsync(SourceRegion.Poland, polandList, Arg.Any<CancellationToken>()).Returns(101L);
         _telegramService.SendThematicBatchAsync(SourceRegion.World, worldList, Arg.Any<CancellationToken>()).Returns(102L);

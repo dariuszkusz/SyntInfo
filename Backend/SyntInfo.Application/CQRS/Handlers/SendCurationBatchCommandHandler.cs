@@ -9,7 +9,7 @@ namespace SyntInfo.Application.CQRS.Handlers;
 public static class SendCurationBatchCommandHandler
 {
     public static async Task<SendCurationBatchResult> Handle(
-        SendCurationBatchCommand command,
+        SendCurationBatchCommand _,
         IUnitOfWork uow,
         ITelegramNotificationService telegramService,
         ITelegramCurationStateService telegramState,
@@ -19,13 +19,9 @@ public static class SendCurationBatchCommandHandler
         var opts = curationOptions.Value;
         telegramState.Clear();
 
-        var polandLimit = command.Count is > 0 ? command.Count.Value : opts.ProposalPolandCount;
-        var worldLimit = command.Count is > 0 ? command.Count.Value : opts.ProposalWorldCount;
-        var positiveLimit = command.Count is > 0 ? command.Count.Value : opts.ProposalPositiveCount;
-
-        var polandArticles = await uow.NewsArticles.GetArticlesForCurationByRegionAsync(SourceRegion.Poland, polandLimit, cancellationToken);
-        var worldArticles = await uow.NewsArticles.GetArticlesForCurationByRegionAsync(SourceRegion.World, worldLimit, cancellationToken);
-        var positiveArticles = await uow.NewsArticles.GetArticlesForCurationByRegionAsync(SourceRegion.Positive, positiveLimit, cancellationToken);
+        var polandArticles = await uow.NewsArticles.GetArticlesForCurationByRegionAsync(SourceRegion.Poland, opts.ProposalPolandCount, cancellationToken);
+        var worldArticles = await uow.NewsArticles.GetArticlesForCurationByRegionAsync(SourceRegion.World, opts.ProposalWorldCount, cancellationToken);
+        var positiveArticles = await uow.NewsArticles.GetArticlesForCurationByRegionAsync(SourceRegion.Positive, opts.ProposalPositiveCount, cancellationToken);
 
         var totalCount = polandArticles.Count + worldArticles.Count + positiveArticles.Count;
 
