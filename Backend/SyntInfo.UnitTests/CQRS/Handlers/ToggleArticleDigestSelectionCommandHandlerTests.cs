@@ -18,10 +18,10 @@ public class ToggleArticleDigestSelectionCommandHandlerTests
     {
         MaxPolandArticles = 5,
         MaxWorldArticles = 5,
-        MaxPositiveArticles = 3,
+        MaxPositiveArticles = 5,
         ProposalPolandCount = 10,
         ProposalWorldCount = 10,
-        ProposalPositiveCount = 6
+        ProposalPositiveCount = 10
     });
     private readonly ILogger<ToggleArticleDigestSelectionCommand> _logger = Substitute.For<ILogger<ToggleArticleDigestSelectionCommand>>();
 
@@ -148,6 +148,58 @@ public class ToggleArticleDigestSelectionCommandHandlerTests
             SourceRegion.Poland,
             Arg.Any<IReadOnlyList<NewsArticle>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenSelectingFifthPositiveArticle_AllowsSelection()
+    {
+        // Arrange
+        var articleId = Guid.NewGuid();
+        var targetArticle = new NewsArticle
+        {
+            Id = articleId,
+            Title = "Kandydat Pozytywne 5",
+            Region = SourceRegion.Positive,
+            IsSelectedForDigest = false,
+            DigestPublishedAt = null
+        };
+
+        _articleRepo.GetByIdAsync(articleId, Arg.Any<CancellationToken>()).Returns(targetArticle);
+
+        // 4 wybrane wcześniej (limit wynosi 5)
+        var existingSelected = Enumerable.Range(1, 4).Select(i => new NewsArticle
+        {
+            Id = Guid.NewGuid(),
+            Title = $"Pozytywne {i}",
+            Region = SourceRegion.Positive,
+            IsSelectedForDigest = true,
+            DigestPublishedAt = null
+        }).ToList();
+
+        _articleRepo.Query().Returns(existingSelected.BuildMock());
+        _articleRepo.GetArticlesForCurationByRegionAsync(SourceRegion.Positive, 10, Arg.Any<CancellationToken>())
+            .Returns(new List<NewsArticle> { targetArticle });
+
+        var command = new ToggleArticleDigestSelectionCommand(
+            ArticleId: articleId,
+            TelegramChatId: 12345,
+            TelegramMessageId: 777,
+            CallbackQueryId: "query-pos-5");
+
+        // Act
+        await ToggleArticleDigestSelectionCommandHandler.Handle(
+            command,
+            _uow,
+            _telegramService,
+            _telegramState,
+            _options,
+            _logger,
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(targetArticle.IsSelectedForDigest);
+        _articleRepo.Received(1).Update(targetArticle);
+        await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

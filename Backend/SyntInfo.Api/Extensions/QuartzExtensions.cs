@@ -9,7 +9,7 @@ namespace SyntInfo.Api.Extensions;
 public static class QuartzExtensions
 {
     /// <summary>
-    /// Konfiguruje harmonogram zadań w tle Quartz wraz z jobami RssFetcherJob i SocialCurationJob.
+    /// Konfiguruje harmonogram zadań w tle Quartz wraz z jobami RssFetcherJob i SocialCurationFallbackJob.
     /// </summary>
     public static IServiceCollection AddQuartzBackgroundJobs(this IServiceCollection services)
     {
@@ -20,20 +20,11 @@ public static class QuartzExtensions
 
             var warsawTimeZone = GetWarsawTimeZone();
 
-            // Odpalanie pobierania RSS 2 razy dziennie (6:00 rano przed kuracją oraz 18:00 czasu polskiego)
+            // Odpalanie pobierania i opracowywania RSS raz dziennie o 6:00 rano (czasu polskiego)
             q.AddTrigger(opts => opts
                 .ForJob(jobKey)
                 .WithIdentity("RssFetcherJob-trigger")
-                .WithCronSchedule("0 0 6,18 * * ?", x => x.InTimeZone(warsawTimeZone)));
-
-            // Odpalanie porannej selekcji artykułów na Telegramie o 7:00 rano (czasu polskiego)
-            var socialJobKey = new JobKey("SocialCurationJob");
-            q.AddJob<SocialCurationJob>(opts => opts.WithIdentity(socialJobKey));
-
-            q.AddTrigger(opts => opts
-                .ForJob(socialJobKey)
-                .WithIdentity("SocialCurationJob-trigger")
-                .WithCronSchedule("0 0 7 * * ?", x => x.InTimeZone(warsawTimeZone)));
+                .WithCronSchedule("0 0 6 * * ?", x => x.InTimeZone(warsawTimeZone)));
 
             // Odpalanie automatycznego fallbacku o 9:00 rano (czasu polskiego), jeśli redaktor nie zareagował
             var fallbackJobKey = new JobKey("SocialCurationFallbackJob");

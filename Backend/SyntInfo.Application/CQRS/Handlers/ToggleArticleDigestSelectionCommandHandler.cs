@@ -33,13 +33,7 @@ public static class ToggleArticleDigestSelectionCommandHandler
             _ => article.Region.ToString()
         };
 
-        var maxLimit = article.Region switch
-        {
-            SourceRegion.Poland => opts.MaxPolandArticles,
-            SourceRegion.World => opts.MaxWorldArticles,
-            SourceRegion.Positive => opts.MaxPositiveArticles,
-            _ => 5
-        };
+        var maxLimit = opts.GetMaxSelectionLimit(article.Region);
 
         // 1. Sprawdzenie limitu kategorii przy próbie zaznaczenia
         if (!article.IsSelectedForDigest)
@@ -79,13 +73,7 @@ public static class ToggleArticleDigestSelectionCommandHandler
         }
 
         // 3. Aktualizacja klawiatury w zbiorczej wiadomości dla danego regionu
-        var proposalLimit = article.Region switch
-        {
-            SourceRegion.Poland => opts.ProposalPolandCount,
-            SourceRegion.World => opts.ProposalWorldCount,
-            SourceRegion.Positive => opts.ProposalPositiveCount,
-            _ => 10
-        };
+        var proposalLimit = opts.GetProposalLimit(article.Region);
 
         var regionArticles = await uow.NewsArticles.GetArticlesForCurationByRegionAsync(article.Region, proposalLimit, cancellationToken);
         var targetMessageId = command.TelegramMessageId ?? telegramState.GetCategoryMessageId(article.Region);
