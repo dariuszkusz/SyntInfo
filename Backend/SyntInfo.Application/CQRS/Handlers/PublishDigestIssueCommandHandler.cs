@@ -26,13 +26,7 @@ public static class PublishDigestIssueCommandHandler
     {
         logger.LogInformation("Rozpoczęto generowanie i publikację zbiorczego wydania InfoSkrót.");
 
-        var selectedArticles = await uow.NewsArticles.GetSelectedForDigestAsync(cancellationToken);
-
-        if (!selectedArticles.Any())
-        {
-            selectedArticles = await uow.NewsArticles.GetActiveArticlesAsync(curationOptions.Value.MaxArticlesPerRun, cancellationToken);
-        }
-
+        var selectedArticles = await GetArticlesToPublishAsync(uow, curationOptions.Value.MaxArticlesPerRun, cancellationToken);
         if (!selectedArticles.Any())
         {
             logger.LogWarning("Brak aktywnych artykułów w bazie do publikacji wydania.");
@@ -46,115 +40,13 @@ public static class PublishDigestIssueCommandHandler
             $"⏳ <b>Trwa przygotowywanie wydania InfoSkrót z {selectedArticles.Count} artykułów...</b>\nGenerowanie treści i wysyłanie na platformy zewnętrzne.",
             cancellationToken);
 
-        string? wykopResult = null;
-        string? hejtoResult = null;
-        string? newsletterResult = null;
+        var wykopResult = await PublishWykopDigestAsync(selectedArticles, postGenerator, wykopClient, logger, cancellationToken);
+        var hejtoResult = await PublishHejtoDigestAsync(selectedArticles, bus, postGenerator, hejtoClient, hejtoOptions.Value, logger, cancellationToken);
+        var newsletterResult = await PublishNewsletterDigestAsync(selectedArticles, postGenerator, mailerLiteClient, mailerLiteOptions.Value, logger, cancellationToken);
 
-        // 1. Publikacja na Wykop v3
-        try
-        {
-            var wykopContent = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Wykop, selectedArticles, cancellationToken);
-            var firstWithImage = selectedArticles.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.ImageUrl));
-            string? photoKey = null;
-
-            if (firstWithImage != null && !string.IsNullOrWhiteSpace(firstWithImage.ImageUrl))
-            {
-                logger.LogInformation("Wysyłanie zdjęcia głównego wydania do Wykopu: {Url}", firstWithImage.ImageUrl);
-                photoKey = await wykopClient.UploadPhotoAsync(firstWithImage.ImageUrl, cancellationToken);
-            }
-
-            var entryId = await wykopClient.CreateEntryAsync(wykopContent, photoKey, cancellationToken);
-            wykopResult = $"✅ Wpis dodany (ID: {entryId})";
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Błąd podczas publikacji wydania na Wykopie");
-            wykopResult = $"❌ Błąd: {ex.Message}";
-        }
-
-        // 2. Publikacja na Hejto (przełączalne: osobno z załącznikami przez nowy Command vs poprzednie wydanie zbiorcze)
-        try
-        {
-            if (hejtoOptions.Value.PublishArticlesSeparately)
-            {
-                var articleIds = selectedArticles.Select(a => a.Id).ToList();
-                var separateResult = await bus.InvokeAsync<PublishHejtoArticlesSeparatelyResult>(
-                    new PublishHejtoArticlesSeparatelyCommand(ArticleIds: articleIds),
-                    cancellationToken);
-
-                if (separateResult.Success)
-                {
-                    hejtoResult = $"✅ Zaplanowano publikację {separateResult.PublishedCount}/{separateResult.TotalArticlesCount} wpisów w tle";
-                }
-                else
-                {
-                    hejtoResult = $"❌ Błąd publikacji osobnej: {separateResult.Error ?? separateResult.Message}";
-                }
-            }
-            else
-            {
-                // Poprzednie rozwiązanie (zbiorczy wpis InfoSkrót) — zachowane do szybkiego powrotu
-                var hejtoContent = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Hejto, selectedArticles, cancellationToken);
-                var postId = await hejtoClient.CreatePostAsync(hejtoContent, null, null, cancellationToken);
-                hejtoResult = $"✅ Wpis dodany (ID: {postId})";
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Błąd podczas publikacji wydania na Hejto");
-            hejtoResult = $"❌ Błąd: {ex.Message}";
-        }
-
-        // 3. Publikacja Newslettera (MailerLite)
-        var isNewsletterEnabled = mailerLiteOptions.Value.Enabled;
-        if (isNewsletterEnabled)
-        {
-            try
-            {
-                var newsletterHtml = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Newsletter, selectedArticles, cancellationToken);
-                var newsletterPlain = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Facebook, selectedArticles, cancellationToken);
-                var issueTitle = $"InfoSkrót — Wydanie z {DateTime.UtcNow:dd.MM.yyyy}";
-                await mailerLiteClient.SendNewsletterCampaignAsync(issueTitle, newsletterHtml, newsletterPlain, cancellationToken);
-                newsletterResult = "✅ Kampania e-mail wysłana";
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Błąd podczas wysyłania kampanii newslettera");
-                newsletterResult = $"❌ Błąd: {ex.Message}";
-            }
-        }
-        else
-        {
-            logger.LogInformation("Wysyłka newslettera jest wyłączona w konfiguracji.");
-            newsletterResult = "⏸️ Wyłączony";
-        }
-
-        // 4. Oznaczenie wybranych artykułów jako opublikowane w wydaniu
-        var selectedIds = selectedArticles.Select(a => a.Id).ToHashSet();
-        foreach (var article in selectedArticles)
-        {
-            article.DigestPublishedAt = DateTime.UtcNow;
-            article.IsSelectedForDigest = false;
-            uow.NewsArticles.Update(article);
-        }
-
-        // 4b. Archiwizacja niewybranych propozycji z bazy, aby nie powracały w kolejnych cyklach kuracji i były ukryte w aplikacji/API
-        var unselectedArticles = await uow.NewsArticles.Query()
-            .Where(a => a.IsActive && a.DigestPublishedAt == null && !selectedIds.Contains(a.Id))
-            .ToListAsync(cancellationToken);
-
-        foreach (var unselected in unselectedArticles)
-        {
-            unselected.DigestPublishedAt = DateTime.UtcNow;
-            unselected.IsSelectedForDigest = false;
-            unselected.IsActive = false;
-            uow.NewsArticles.Update(unselected);
-        }
-
-        await uow.SaveChangesAsync(cancellationToken);
+        await MarkAndArchiveArticlesAsync(uow, selectedArticles, cancellationToken);
         telegramState.Clear();
 
-        // 5. Raport końcowy na Telegramie
         var summaryReport = $"🗞️ <b>Raport z publikacji wydania InfoSkrót ({selectedArticles.Count} artykułów)</b>\n\n" +
                             $"🟦 <b>Wykop:</b> {wykopResult}\n" +
                             $"🟩 <b>Hejto:</b> {hejtoResult}\n" +
@@ -163,5 +55,147 @@ public static class PublishDigestIssueCommandHandler
 
         await telegramService.SendSimpleNotificationAsync(summaryReport, cancellationToken);
         logger.LogInformation("Zakończono publikację zbiorczego wydania InfoSkrót.");
+    }
+
+    private static async Task<List<NewsArticle>> GetArticlesToPublishAsync(
+        IUnitOfWork uow,
+        int maxArticlesPerRun,
+        CancellationToken cancellationToken)
+    {
+        var selectedArticles = await uow.NewsArticles.GetSelectedForDigestAsync(cancellationToken);
+        if (!selectedArticles.Any())
+        {
+            selectedArticles = await uow.NewsArticles.GetActiveArticlesAsync(maxArticlesPerRun, cancellationToken);
+        }
+        return selectedArticles;
+    }
+
+    private static async Task<string> PublishWykopDigestAsync(
+        IReadOnlyList<NewsArticle> articles,
+        ISocialPostGenerator postGenerator,
+        IWykopClient wykopClient,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var wykopContent = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Wykop, articles, cancellationToken);
+            var firstWithImage = articles.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.ImageUrl));
+            string? photoKey = null;
+
+            if (firstWithImage != null && !string.IsNullOrWhiteSpace(firstWithImage.ImageUrl))
+            {
+                try
+                {
+                    logger.LogInformation("Wysyłanie zdjęcia głównego wydania do Wykopu: {Url}", firstWithImage.ImageUrl);
+                    photoKey = await wykopClient.UploadPhotoAsync(firstWithImage.ImageUrl, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Nie udało się przesłać zdjęcia głównego wydania do Wykopu. Kontynuacja bez zdjęcia.");
+                }
+            }
+
+            var entryId = await wykopClient.CreateEntryAsync(wykopContent, photoKey, cancellationToken);
+            return $"✅ Wpis dodany (ID: {entryId})";
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Błąd podczas publikacji wydania na Wykopie");
+            return $"❌ Błąd: {ex.Message}";
+        }
+    }
+
+    private static async Task<string> PublishHejtoDigestAsync(
+        IReadOnlyList<NewsArticle> articles,
+        IMessageBus bus,
+        ISocialPostGenerator postGenerator,
+        IHejtoClient hejtoClient,
+        HejtoOptions hejtoOptions,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (hejtoOptions.PublishArticlesSeparately)
+            {
+                var articleIds = articles.Select(a => a.Id).ToList();
+                var separateResult = await bus.InvokeAsync<PublishHejtoArticlesSeparatelyResult>(
+                    new PublishHejtoArticlesSeparatelyCommand(ArticleIds: articleIds),
+                    cancellationToken);
+
+                return separateResult.Success
+                    ? $"✅ Zaplanowano publikację {separateResult.PublishedCount}/{separateResult.TotalArticlesCount} wpisów w tle"
+                    : $"❌ Błąd publikacji osobnej: {separateResult.Error ?? separateResult.Message}";
+            }
+
+            var hejtoContent = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Hejto, articles, cancellationToken);
+            var postId = await hejtoClient.CreatePostAsync(hejtoContent, null, null, cancellationToken);
+            return $"✅ Wpis dodany (ID: {postId})";
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Błąd podczas publikacji wydania na Hejto");
+            return $"❌ Błąd: {ex.Message}";
+        }
+    }
+
+    private static async Task<string> PublishNewsletterDigestAsync(
+        IReadOnlyList<NewsArticle> articles,
+        ISocialPostGenerator postGenerator,
+        IMailerLiteClient mailerLiteClient,
+        MailerLiteOptions mailerLiteOptions,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        if (!mailerLiteOptions.Enabled)
+        {
+            logger.LogInformation("Wysyłka newslettera jest wyłączona w konfiguracji.");
+            return "⏸️ Wyłączony";
+        }
+
+        try
+        {
+            var newsletterHtml = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Newsletter, articles, cancellationToken);
+            var newsletterPlain = await postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Facebook, articles, cancellationToken);
+            var issueTitle = $"InfoSkrót — Wydanie z {DateTime.UtcNow:dd.MM.yyyy}";
+            await mailerLiteClient.SendNewsletterCampaignAsync(issueTitle, newsletterHtml, newsletterPlain, cancellationToken);
+            return "✅ Kampania e-mail wysłana";
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Błąd podczas wysyłania kampanii newslettera");
+            return $"❌ Błąd: {ex.Message}";
+        }
+    }
+
+    private static async Task MarkAndArchiveArticlesAsync(
+        IUnitOfWork uow,
+        IReadOnlyList<NewsArticle> selectedArticles,
+        CancellationToken cancellationToken)
+    {
+        var nowUtc = DateTime.UtcNow;
+        var selectedIds = selectedArticles.Select(a => a.Id).ToHashSet();
+
+        foreach (var article in selectedArticles)
+        {
+            article.DigestPublishedAt = nowUtc;
+            article.IsSelectedForDigest = false;
+            uow.NewsArticles.Update(article);
+        }
+
+        var unselectedArticles = await uow.NewsArticles.Query()
+            .Where(a => a.IsActive && a.DigestPublishedAt == null && !selectedIds.Contains(a.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var unselected in unselectedArticles)
+        {
+            unselected.DigestPublishedAt = nowUtc;
+            unselected.IsSelectedForDigest = false;
+            unselected.IsActive = false;
+            uow.NewsArticles.Update(unselected);
+        }
+
+        await uow.SaveChangesAsync(cancellationToken);
     }
 }

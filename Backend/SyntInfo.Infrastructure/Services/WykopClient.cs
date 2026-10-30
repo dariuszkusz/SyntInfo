@@ -67,7 +67,6 @@ public class WykopClient : IWykopClient
         var logsPath = Path.Combine(AppContext.BaseDirectory, "logs", "wykop_tokens.json");
         var basePath = Path.Combine(AppContext.BaseDirectory, "wykop_tokens.json");
 
-        // Jeśli plik istnieje w głównym katalogu (dla wstecznej kompatybilności), użyj go, w przeciwnym razie wybierz logs/
         return File.Exists(basePath) ? basePath : logsPath;
     }
 
@@ -108,7 +107,6 @@ public class WykopClient : IWykopClient
             throw new ArgumentException("UserToken nie może być pusty.", nameof(userToken));
         }
 
-        // Token użytkownika zazwyczaj ważny jest 24h, zachowajmy w cache
         _memoryCache.Set(UserTokenCacheKey, userToken.Trim(), TimeSpan.FromHours(23));
 
         if (!string.IsNullOrWhiteSpace(refreshToken))
@@ -161,32 +159,14 @@ public class WykopClient : IWykopClient
 
         try
         {
-            byte[] imageBytes;
-            string fileName = "photo.jpg";
-
-            if (imageUrlOrPath.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                imageUrlOrPath.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            var downloaded = await RemoteImageDownloader.DownloadImageAsync(
+                _httpClientFactory, imageUrlOrPath, "photo.jpg", _logger, cancellationToken);
+            if (downloaded == null)
             {
-                var downloadClient = _httpClientFactory.CreateClient();
-                imageBytes = await downloadClient.GetByteArrayAsync(imageUrlOrPath, cancellationToken);
-                var uri = new Uri(imageUrlOrPath);
-                var lastSegment = Path.GetFileName(uri.LocalPath);
-                if (!string.IsNullOrWhiteSpace(lastSegment) && lastSegment.Contains('.'))
-                {
-                    fileName = lastSegment;
-                }
-            }
-            else if (File.Exists(imageUrlOrPath))
-            {
-                imageBytes = await File.ReadAllBytesAsync(imageUrlOrPath, cancellationToken);
-                fileName = Path.GetFileName(imageUrlOrPath);
-            }
-            else
-            {
-                _logger.LogWarning("Nieprawidłowa ścieżka lub URL zdjęcia: {Path}", imageUrlOrPath);
                 return null;
             }
 
+            var (imageBytes, fileName) = downloaded.Value;
             var baseUrl = GetBaseUrl();
             var wykopClient = _httpClientFactory.CreateClient("WykopClient");
 
@@ -196,7 +176,6 @@ public class WykopClient : IWykopClient
                 return key;
             }
 
-            // Jeśli wysłanie nie powiodło się z powodu błędu autoryzacji (401/403), odświeżamy token i ponawiamy
             if (isAuthError)
             {
                 _logger.LogWarning("Błąd autoryzacji podczas wysyłania zdjęcia do Wykopu. Próba automatycznego odświeżenia tokenu użytkownika...");
@@ -235,7 +214,7 @@ public class WykopClient : IWykopClient
 
         using var form = new MultipartFormDataContent();
         var byteContent = new ByteArrayContent(imageBytes);
-        byteContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        byteContent.Headers.ContentType = new MediaTypeHeaderValue(RemoteImageDownloader.GetMediaType(fileName));
         form.Add(byteContent, "file", fileName);
         uploadRequest.Content = form;
 
@@ -299,7 +278,6 @@ public class WykopClient : IWykopClient
 
         var response = await SendEntryRequestAsync(client, baseUrl, content, photoKey, userToken, cancellationToken);
 
-        // Jeśli status to 401 lub 403, spróbujmy odświeżyć token i ponowić zapytanie
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -361,13 +339,11 @@ public class WykopClient : IWykopClient
 
     private async Task<string?> GetOrRefreshUserTokenAsync(CancellationToken cancellationToken)
     {
-        // 1. Sprawdź pamięć podręczną
         if (_memoryCache.TryGetValue(UserTokenCacheKey, out string? cachedUserToken) && !string.IsNullOrWhiteSpace(cachedUserToken))
         {
             return cachedUserToken;
         }
 
-        // 1b. Sprawdź trwały plik wykop_tokens.json
         var fileData = await ReadTokenFileAsync(cancellationToken);
         if (fileData != null)
         {
@@ -378,7 +354,6 @@ public class WykopClient : IWykopClient
 
             if (!string.IsNullOrWhiteSpace(fileData.UserToken))
             {
-                // Sprawdź wiek tokenu (jeśli SavedAt jest obecne)
                 if (fileData.SavedAt.HasValue)
                 {
                     var tokenAge = DateTime.UtcNow - fileData.SavedAt.Value;
@@ -403,14 +378,12 @@ public class WykopClient : IWykopClient
                 }
                 else
                 {
-                    // Starszy format bez SavedAt - cache'uj na 1h
                     _memoryCache.Set(UserTokenCacheKey, fileData.UserToken.Trim(), TimeSpan.FromHours(1));
                     return fileData.UserToken.Trim();
                 }
             }
         }
 
-        // 2. Sprawdź konfigurację (UserToken)
         var userToken = _wykopOptions.UserToken;
         if (!string.IsNullOrWhiteSpace(userToken) && !userToken.Contains("PLACEHOLDER"))
         {
@@ -418,7 +391,6 @@ public class WykopClient : IWykopClient
             return userToken.Trim();
         }
 
-        // 3. Sprawdź RefreshToken z cache, pliku lub konfiguracji
         return await TryRefreshStoredUserTokenAsync(cancellationToken);
     }
 
@@ -573,5 +545,3 @@ public class WykopClient : IWykopClient
         public DateTime? SavedAt { get; set; }
     }
 }
-
-

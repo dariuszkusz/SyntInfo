@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
+using SyntInfo.Application.CQRS.Commands;
+using Wolverine;
 
 namespace SyntInfo.Api.Controllers;
 
@@ -8,18 +10,15 @@ namespace SyntInfo.Api.Controllers;
 [Authorize(Roles = "Admin")]
 public class WykopAuthController : ControllerBase
 {
-    private readonly IWykopClient _wykopClient;
+    private readonly IMessageBus _bus;
     private readonly AppOptions _appOptions;
-    private readonly ILogger<WykopAuthController> _logger;
 
     public WykopAuthController(
-        IWykopClient wykopClient,
-        IOptions<AppOptions> appOptions,
-        ILogger<WykopAuthController> logger)
+        IMessageBus bus,
+        IOptions<AppOptions> appOptions)
     {
-        _wykopClient = wykopClient;
+        _bus = bus;
         _appOptions = appOptions.Value;
-        _logger = logger;
     }
 
     /// <summary>
@@ -28,21 +27,11 @@ public class WykopAuthController : ControllerBase
     [HttpGet("connect-url")]
     public async Task<IActionResult> GetConnectUrl(CancellationToken cancellationToken)
     {
-        try
-        {
-            var url = await _wykopClient.GetConnectUrlAsync(cancellationToken);
-            return Ok(new
-            {
-                Success = true,
-                ConnectUrl = url,
-                Instruction = "Otwórz ten adres w przeglądarce, zaloguj się na Wykopie i kliknij 'Połącz konto'. Po zaakceptowaniu nastąpi przekierowanie z tokenem autoryzacyjnym."
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Błąd podczas generowania linku Wykop Connect");
-            return StatusCode(500, new { Success = false, Error = ex.Message });
-        }
+        var result = await _bus.InvokeAsync<GetWykopConnectUrlResult>(
+            new GetWykopConnectUrlCommand(),
+            cancellationToken);
+
+        return result.Success ? Ok(result) : StatusCode(500, result);
     }
 
     /// <summary>
@@ -63,18 +52,13 @@ public class WykopAuthController : ControllerBase
             return Redirect($"{frontendUrl}/settings/integrations?error=missing_token");
         }
 
-        try
-        {
-            await _wykopClient.SaveUserTokensAsync(token, rtoken, cancellationToken);
-            _logger.LogInformation("Pomyślnie powiązano konto użytkownika Wykop.");
+        var result = await _bus.InvokeAsync<SaveWykopUserTokensResult>(
+            new SaveWykopUserTokensCommand(token, rtoken),
+            cancellationToken);
 
-            return Redirect($"{frontendUrl}/settings/integrations?status=wykop_connected");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Błąd podczas zapisu tokenu Wykop Connect");
-            return Redirect($"{frontendUrl}/settings/integrations?error=save_failed");
-        }
+        return result.Success
+            ? Redirect($"{frontendUrl}/settings/integrations?status=wykop_connected")
+            : Redirect($"{frontendUrl}/settings/integrations?error=save_failed");
     }
 
     public record SetUserTokenDto(string Token, string? RefreshToken);
@@ -90,7 +74,10 @@ public class WykopAuthController : ControllerBase
             return BadRequest(new { Success = false, Error = "Pole Token nie może być puste." });
         }
 
-        await _wykopClient.SaveUserTokensAsync(dto.Token, dto.RefreshToken, cancellationToken);
-        return Ok(new { Success = true, Message = "Token użytkownika Wykop został pomyślnie zapisany w systemie." });
+        var result = await _bus.InvokeAsync<SaveWykopUserTokensResult>(
+            new SaveWykopUserTokensCommand(dto.Token, dto.RefreshToken),
+            cancellationToken);
+
+        return result.Success ? Ok(result) : StatusCode(500, result);
     }
 }

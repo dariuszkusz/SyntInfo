@@ -52,33 +52,15 @@ public class HejtoClient : IHejtoClient
 
         try
         {
-            byte[] imageBytes;
-            var fileName = "image.jpg";
-
-            if (imageUrlOrPath.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                imageUrlOrPath.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            var downloaded = await RemoteImageDownloader.DownloadImageAsync(
+                _httpClientFactory, imageUrlOrPath, "image.jpg", _logger, cancellationToken);
+            if (downloaded == null)
             {
-                var downloadClient = _httpClientFactory.CreateClient();
-                imageBytes = await downloadClient.GetByteArrayAsync(imageUrlOrPath, cancellationToken);
-                var uri = new Uri(imageUrlOrPath);
-                var lastSegment = Path.GetFileName(uri.LocalPath);
-                if (!string.IsNullOrWhiteSpace(lastSegment) && lastSegment.Contains('.'))
-                {
-                    fileName = lastSegment;
-                }
-            }
-            else if (File.Exists(imageUrlOrPath))
-            {
-                imageBytes = await File.ReadAllBytesAsync(imageUrlOrPath, cancellationToken);
-                fileName = Path.GetFileName(imageUrlOrPath);
-            }
-            else
-            {
-                _logger.LogWarning("Nieprawidłowa ścieżka lub URL obrazka dla Hejto: {Path}", imageUrlOrPath);
                 return null;
             }
 
-            var mediaType = GetMediaType(fileName);
+            var (imageBytes, fileName) = downloaded.Value;
+            var mediaType = RemoteImageDownloader.GetMediaType(fileName);
             var baseUrl = _hejtoOptions.BaseUrl;
             if (!baseUrl.EndsWith("/")) baseUrl += "/";
 
@@ -228,18 +210,6 @@ public class HejtoClient : IHejtoClient
         }
 
         return "hejto-post-published";
-    }
-
-    private static string GetMediaType(string fileName)
-    {
-        var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        return ext switch
-        {
-            ".png" => "image/png",
-            ".webp" => "image/webp",
-            ".gif" => "image/gif",
-            _ => "image/jpeg"
-        };
     }
 
     private async Task<string?> GetOrRefreshTokenAsync(CancellationToken cancellationToken)
