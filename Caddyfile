@@ -1,24 +1,21 @@
 # Konfiguracja dla domeny głównej infoskrot.pl
 # Caddy automatycznie wygeneruje i odnowi certyfikaty SSL/TLS (Let's Encrypt / ZeroSSL)
 # oraz przekieruje cały ruch z HTTP (port 80) na HTTPS (port 443).
+
 www.infoskrot.pl {
     redir https://infoskrot.pl{uri} 301
 }
+
 infoskrot.pl {
     # Przekierowanie do API
     handle /api/* {
         reverse_proxy api:8080
     }
+
     # Przekierowanie ruchu na aplikację frontendową (Angular)
     handle /* {
         reverse_proxy frontend:80
     }
 }
-# Actual Budget (marywilskaBot)
-marywilskahome.duckdns.org {
-    reverse_proxy home-bot-actual:5006
-}
-# n8n Automation (marywilskaBot)
-marywilskan8n.duckdns.org {
-    reverse_proxy home-bot:5678
-}
+
+import /etc/caddy/conf.d/*.caddy
