@@ -57,5 +57,9 @@ public interface ITelegramNotificationService
     /// Odpowiada na zapytanie zwrotne (CallbackQuery) z Telegrama (np. powiadomienie lub alert przy przekroczeniu limitu).
     /// </summary>
     Task AnswerCallbackQueryAsync(string callbackQueryId, string? text = null, bool showAlert = false, CancellationToken cancellationToken = default);
-}
 
+    /// <summary>
+    /// Rejestruje adres URL webhooka w API Telegrama dla bota.
+    /// </summary>
+    Task SetWebhookAsync(string webhookUrl, string? secretToken = null, CancellationToken cancellationToken = default);
+}

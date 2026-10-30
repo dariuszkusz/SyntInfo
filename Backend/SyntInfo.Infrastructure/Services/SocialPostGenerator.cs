@@ -17,7 +17,7 @@ public class SocialPostGenerator : ISocialPostGenerator
     public async Task<string> GenerateContentForPlatformAsync(SocialPlatformType platform, NewsArticle article, CancellationToken cancellationToken = default)
     {
         var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://syntinfo.local";
-        var categoryTag = SanitizeTag(article.Category?.Name ?? "wiadomosci");
+        var categoryTag = TagFormattingHelper.SanitizeTag(article.Category?.Name, "wiadomosci");
 
         try
         {

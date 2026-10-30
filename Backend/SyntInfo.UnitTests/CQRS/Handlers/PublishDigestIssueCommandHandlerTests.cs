@@ -1,6 +1,4 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using NSubstitute;
 using SyntInfo.Application.CQRS.Commands;
 using SyntInfo.Application.CQRS.Handlers;
 using SyntInfo.Application.Interfaces;
@@ -8,7 +6,6 @@ using SyntInfo.Application.Options;
 using SyntInfo.Domain.Entities;
 using SyntInfo.Domain.Interfaces;
 using Wolverine;
-using Xunit;
 
 namespace SyntInfo.UnitTests.CQRS.Handlers;
 
@@ -97,5 +94,68 @@ public class PublishDigestIssueCommandHandlerTests
         _articleRepo.Received().Update(selectedArticle);
         _articleRepo.Received().Update(unselectedArticle);
         await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenWykopPhotoUploadThrows_StillPublishesWykopEntryWithoutPhotoAndDispatchesSeparateHejtoAndNewsletter()
+    {
+        // Arrange
+        var article = new NewsArticle
+        {
+            Id = Guid.NewGuid(),
+            Title = "Artykuł z obrazkiem",
+            ImageUrl = "https://example.com/image.jpg",
+            IsSelectedForDigest = true,
+            IsActive = true
+        };
+
+        _articleRepo.GetSelectedForDigestAsync(Arg.Any<CancellationToken>())
+            .Returns(new List<NewsArticle> { article });
+        _articleRepo.Query().Returns(new List<NewsArticle> { article }.BuildMock());
+
+        _postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Wykop, Arg.Any<IReadOnlyList<NewsArticle>>(), Arg.Any<CancellationToken>())
+            .Returns("Treść Wykop");
+        _postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Newsletter, Arg.Any<IReadOnlyList<NewsArticle>>(), Arg.Any<CancellationToken>())
+            .Returns("<html>Newsletter</html>");
+        _postGenerator.GenerateDigestContentForPlatformAsync(SocialPlatformType.Facebook, Arg.Any<IReadOnlyList<NewsArticle>>(), Arg.Any<CancellationToken>())
+            .Returns("Plain text newsletter");
+
+        _wykopClient.UploadPhotoAsync("https://example.com/image.jpg", Arg.Any<CancellationToken>())
+            .Returns<string?>(_ => throw new HttpRequestException("Błąd uploadu zdjęcia"));
+        _wykopClient.CreateEntryAsync("Treść Wykop", null, Arg.Any<CancellationToken>())
+            .Returns("wykop-id-1");
+        _bus.InvokeAsync<PublishHejtoArticlesSeparatelyResult>(
+                Arg.Any<PublishHejtoArticlesSeparatelyCommand>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PublishHejtoArticlesSeparatelyResult(true, 1, 1, new List<string> { "slug-1" }, "OK"));
+        _mailerLiteClient.SendNewsletterCampaignAsync(Arg.Any<string>(), "<html>Newsletter</html>", "Plain text newsletter", Arg.Any<CancellationToken>())
+            .Returns("ml-camp-1");
+
+        var hejtoSeparateOpts = Options.Create(new HejtoOptions { PublishArticlesSeparately = true });
+        var mailerLiteEnabledOpts = Options.Create(new MailerLiteOptions { Enabled = true });
+
+        // Act
+        await PublishDigestIssueCommandHandler.Handle(
+            new PublishDigestIssueCommand(100, 200),
+            _uow,
+            _bus,
+            _postGenerator,
+            _wykopClient,
+            _hejtoClient,
+            _mailerLiteClient,
+            _telegramService,
+            _telegramState,
+            _curationOptions,
+            hejtoSeparateOpts,
+            mailerLiteEnabledOpts,
+            _logger,
+            CancellationToken.None);
+
+        // Assert
+        await _wykopClient.Received(1).CreateEntryAsync("Treść Wykop", null, Arg.Any<CancellationToken>());
+        await _bus.Received(1).InvokeAsync<PublishHejtoArticlesSeparatelyResult>(
+            Arg.Is<PublishHejtoArticlesSeparatelyCommand>(c => c.ArticleIds != null && c.ArticleIds.Contains(article.Id)),
+            Arg.Any<CancellationToken>());
+        await _mailerLiteClient.Received(1).SendNewsletterCampaignAsync(Arg.Any<string>(), "<html>Newsletter</html>", "Plain text newsletter", Arg.Any<CancellationToken>());
     }
 }

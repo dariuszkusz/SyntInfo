@@ -409,6 +409,17 @@ public class TelegramNotificationService : ITelegramNotificationService
         }
     }
 
+    public async Task SetWebhookAsync(string webhookUrl, string? secretToken = null, CancellationToken cancellationToken = default)
+    {
+        var client = ResolveClient()
+            ?? throw new InvalidOperationException("Brak skonfigurowanego Telegram:BotToken.");
+
+        await client.SetWebhook(
+            url: webhookUrl,
+            secretToken: !string.IsNullOrWhiteSpace(secretToken) ? secretToken : null,
+            cancellationToken: cancellationToken);
+    }
+
     #region Single Source of Truth: UI Card & Text Builders
 
     private static (string Text, InlineKeyboardMarkup Markup) BuildArticleCurationCard(NewsArticle article, bool isSelected)

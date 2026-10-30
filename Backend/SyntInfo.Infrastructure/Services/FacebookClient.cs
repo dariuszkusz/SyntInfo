@@ -29,7 +29,7 @@ public class FacebookClient : IFacebookClient
         {
             _logger.LogInformation("FacebookClient [MOCK/TEST]: Publikowanie posta na Facebooku (PageId: {PageId}, Długość: {Length})",
                 pageId ?? "mock-page", message.Length);
-            return $"fb-mock-post-{Guid.NewGuid():N}[..8]";
+            return $"fb-mock-post-{Guid.NewGuid():N}"[..20];
         }
 
         var postData = new Dictionary<string, string>

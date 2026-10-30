@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using SyntInfo.Application.CQRS.Queries;
 using SyntInfo.Application.CQRS.Commands;
 using SyntInfo.Application.DTOs;
@@ -31,6 +32,7 @@ public class NewsController : ControllerBase
         return Ok(result);
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("sync")]
     public async Task<IActionResult> TriggerSync()
     {
@@ -41,6 +43,7 @@ public class NewsController : ControllerBase
         return Accepted(new { Message = "Ręczna synchronizacja uruchomiona." });
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("clear")]
     public async Task<IActionResult> ClearArticles()
     {
