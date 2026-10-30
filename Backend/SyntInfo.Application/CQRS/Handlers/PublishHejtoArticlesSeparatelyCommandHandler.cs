@@ -69,22 +69,23 @@ public static class PublishHejtoArticlesSeparatelyCommandHandler
         for (var i = 0; i < articles.Count; i++)
         {
             var article = articles[i];
-            var delay = TimeSpan.FromSeconds(i * delaySeconds);
+            var delay = CalculatePublicationDelay(i, delaySeconds);
+            var displayPosition = ToOneBasedPosition(i);
 
             await bus.ScheduleAsync(
                 new PublishSingleHejtoArticleCommand(
                     ArticleId: article.Id,
                     CommunitySlug: command.CommunitySlug,
-                    Index: i + 1,
+                    Index: displayPosition,
                     TotalCount: articles.Count),
                 delay);
 
             logger.LogInformation(
                 "Zaplanowano publikację artykułu ({Index}/{Total}) '{Title}' ({ArticleId}) na Hejto z opóźnieniem {Delay}.",
-                i + 1, articles.Count, article.Title, article.Id, delay);
+                displayPosition, articles.Count, article.Title, article.Id, delay);
         }
 
-        var totalDuration = TimeSpan.FromSeconds((articles.Count - 1) * delaySeconds);
+        var totalDuration = CalculateTotalDuration(articles.Count, delaySeconds);
         var summaryMsg = $"Zaplanowano publikację {articles.Count} artykułów na Hejto co {delaySeconds}s (całość zajmie ~{totalDuration.TotalMinutes:F1} min bez blokowania wątku).";
 
         return new PublishHejtoArticlesSeparatelyResult(
@@ -127,6 +128,23 @@ public static class PublishHejtoArticlesSeparatelyCommandHandler
         sb.AppendLine(string.Join(" ", tags));
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Konwertuje indeks liczony od 0 na 1-bazową pozycję kolejności (numerację porządkową 1..N) dla ludzi i logów.
+    /// </summary>
+    private static int ToOneBasedPosition(int zeroBasedIndex) => zeroBasedIndex + 1;
+
+    /// <summary>
+    /// Wylicza opóźnienie harmonogramowania dla artykułu o danym indeksie w kolejce.
+    /// </summary>
+    private static TimeSpan CalculatePublicationDelay(int zeroBasedIndex, int intervalSeconds) =>
+        TimeSpan.FromSeconds(zeroBasedIndex * intervalSeconds);
+
+    /// <summary>
+    /// Wylicza szacowany łączny czas trwania publikacji całej partii artykułów.
+    /// </summary>
+    private static TimeSpan CalculateTotalDuration(int totalCount, int intervalSeconds) =>
+        totalCount <= 1 ? TimeSpan.Zero : TimeSpan.FromSeconds((totalCount - 1) * intervalSeconds);
 
     private static string SanitizeTag(string? text)
     {
