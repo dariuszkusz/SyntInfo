@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using SyntInfo.Application.CQRS.Commands;
 
 namespace SyntInfo.Application.CQRS.Handlers;
@@ -17,7 +16,7 @@ public class ClearAllArticlesCommandHandler
     public async Task Handle(ClearAllArticlesCommand command, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Rozpoczęto czyszczenie bazy danych z wiadomości.");
-        await _uow.Repository<NewsArticle>().Query().ExecuteDeleteAsync(cancellationToken);
+        await _uow.NewsArticles.DeleteAllAsync(cancellationToken);
 
         var sources = await _uow.NewsSources.GetAllSourcesAsync(cancellationToken);
         foreach (var source in sources)

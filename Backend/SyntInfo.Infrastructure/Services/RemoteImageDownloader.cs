@@ -4,7 +4,7 @@ namespace SyntInfo.Infrastructure.Services;
 /// Bezpieczny helper do pobierania załączników graficznych z publicznych adresów HTTP/HTTPS.
 /// Blokuje dostęp do lokalnego systemu plików oraz prywatnych adresów sieciowych (ochrona przed SSRF i Local File Disclosure).
 /// </summary>
-internal static class RemoteImageDownloader
+public static class RemoteImageDownloader
 {
     public static async Task<(byte[] Bytes, string FileName)?> DownloadImageAsync(
         IHttpClientFactory httpClientFactory,
@@ -46,4 +46,3 @@ internal static class RemoteImageDownloader
         };
     }
 }
-

@@ -73,6 +73,11 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
             .ToListAsync(cancellationToken);
     }
 
+    public async Task DeleteAllAsync(CancellationToken cancellationToken = default)
+    {
+        await _db.NewsArticles.ExecuteDeleteAsync(cancellationToken);
+    }
+
     private static IQueryable<NewsArticle> FilterValidActive(IQueryable<NewsArticle> query)
     {
         return query.Where(a => a.IsActive
