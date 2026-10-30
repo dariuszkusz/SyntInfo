@@ -9,3 +9,4 @@ public record PublishSingleHejtoArticleCommand(
     string? CommunitySlug = null,
     int Index = 1,
     int TotalCount = 1);
+

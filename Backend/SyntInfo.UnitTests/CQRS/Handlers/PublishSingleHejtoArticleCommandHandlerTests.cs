@@ -1,14 +1,11 @@
-using FluentAssertions;
-using Microsoft.Extensions.Logging;
-using MockQueryable.NSubstitute;
-using NSubstitute;
+
 using NSubstitute.ExceptionExtensions;
 using SyntInfo.Application.CQRS.Commands;
 using SyntInfo.Application.CQRS.Handlers;
 using SyntInfo.Application.Interfaces;
 using SyntInfo.Domain.Entities;
 using SyntInfo.Domain.Interfaces;
-using Xunit;
+
 
 namespace SyntInfo.UnitTests.CQRS.Handlers;
 
