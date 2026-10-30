@@ -1,20 +1,22 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using SyntInfo.Application.CQRS.Commands;
+using Wolverine;
 using Wolverine.Attributes;
 
 namespace SyntInfo.Application.CQRS.Handlers;
 
 /// <summary>
-/// Handler CQRS publikujący każdy artykuł jako osobny wpis na portalu Hejto wraz z natywnym załącznikiem graficznym (upload zdjęcia + publikacja).
+/// Handler CQRS orkiestrujący publikację artykułów na Hejto za pomocą asynchronicznych opóźnionych komunikatów Wolverine (Scheduled Messages).
+/// Dzięki temu wątek wykonawczy nie jest blokowany, a wpisy są publikowane z bezpiecznym interwałem zapobiegającym limitom anty-flood API Hejto.
 /// </summary>
 public static class PublishHejtoArticlesSeparatelyCommandHandler
 {
-    [MessageTimeout(300)]
+    [MessageTimeout(60)]
     public static async Task<PublishHejtoArticlesSeparatelyResult> Handle(
         PublishHejtoArticlesSeparatelyCommand command,
         IUnitOfWork uow,
-        IHejtoClient hejtoClient,
+        IMessageBus bus,
         IOptions<CurationOptions> curationOptions,
         IOptions<HejtoOptions> hejtoOptions,
         ILogger<PublishHejtoArticlesSeparatelyCommand> logger,
@@ -59,79 +61,39 @@ public static class PublishHejtoArticlesSeparatelyCommandHandler
                 Error: "Brak artykułów.");
         }
 
-        logger.LogInformation("Rozpoczęto osobną publikację {Count} artykułów wraz z załącznikami na Hejto.", articles.Count);
-
-        var postIds = new List<string>();
-        var errors = new List<string>();
-        var delayMs = Math.Max(0, hejtoOptions.Value.DelayBetweenPostsMs);
+        var delaySeconds = Math.Max(1, hejtoOptions.Value.DelayBetweenPostsSeconds);
+        logger.LogInformation(
+            "Harmonogramowanie asynchronicznej publikacji {Count} artykułów na Hejto z interwałem {DelaySeconds}s (bez blokowania wątku).",
+            articles.Count, delaySeconds);
 
         for (var i = 0; i < articles.Count; i++)
         {
             var article = articles[i];
-            try
-            {
-                string? imageUuid = null;
-                if (!string.IsNullOrWhiteSpace(article.ImageUrl))
-                {
-                    try
-                    {
-                        logger.LogInformation("Przesyłanie załącznika graficznego do Hejto dla artykułu '{Title}': {Url}", article.Title, article.ImageUrl);
-                        imageUuid = await hejtoClient.UploadImageAsync(article.ImageUrl, cancellationToken);
-                    }
-                    catch (Exception uploadEx)
-                    {
-                        logger.LogWarning(uploadEx, "Nie udało się przesłać obrazka do Hejto dla artykułu '{Title}'. Kontynuacja bez załącznika.", article.Title);
-                    }
-                }
+            var delay = CalculatePublicationDelay(i, delaySeconds);
+            var displayPosition = ToOneBasedPosition(i);
 
-                var postContent = FormatSingleArticleForHejto(article);
-                var postId = await hejtoClient.CreatePostAsync(
-                    postContent,
-                    command.CommunitySlug,
-                    imageUuid,
-                    cancellationToken);
+            await bus.ScheduleAsync(
+                new PublishSingleHejtoArticleCommand(
+                    ArticleId: article.Id,
+                    CommunitySlug: command.CommunitySlug,
+                    Index: displayPosition,
+                    TotalCount: articles.Count),
+                delay);
 
-                postIds.Add(postId);
-                logger.LogInformation(
-                    "Opublikowano artykuł ({Index}/{Total}) '{Title}' na Hejto (ID: {PostId}, Załącznik: {HasAttachment}).",
-                    i + 1,
-                    articles.Count,
-                    article.Title,
-                    postId,
-                    !string.IsNullOrWhiteSpace(imageUuid));
-
-                if (delayMs > 0 && i < articles.Count - 1)
-                {
-                    await Task.Delay(delayMs, cancellationToken);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Błąd podczas publikowania artykułu '{Title}' ({ArticleId}) na Hejto.", article.Title, article.Id);
-                errors.Add($"{article.Title}: {ex.Message}");
-            }
+            logger.LogInformation(
+                "Zaplanowano publikację artykułu ({Index}/{Total}) '{Title}' ({ArticleId}) na Hejto z opóźnieniem {Delay}.",
+                displayPosition, articles.Count, article.Title, article.Id, delay);
         }
 
-        if (postIds.Count == 0)
-        {
-            var combinedError = string.Join("; ", errors);
-            return new PublishHejtoArticlesSeparatelyResult(
-                Success: false,
-                TotalArticlesCount: articles.Count,
-                PublishedCount: 0,
-                PostIds: postIds,
-                Message: "Nie udało się opublikować żadnego artykułu na Hejto.",
-                Error: combinedError);
-        }
+        var totalDuration = CalculateTotalDuration(articles.Count, delaySeconds);
+        var summaryMsg = $"Zaplanowano publikację {articles.Count} artykułów na Hejto co {delaySeconds}s (całość zajmie ~{totalDuration.TotalMinutes:F1} min bez blokowania wątku).";
 
-        var summaryMsg = $"Opublikowano osobno {postIds.Count}/{articles.Count} artykułów na Hejto.";
         return new PublishHejtoArticlesSeparatelyResult(
             Success: true,
             TotalArticlesCount: articles.Count,
-            PublishedCount: postIds.Count,
-            PostIds: postIds,
-            Message: summaryMsg,
-            Error: errors.Count > 0 ? string.Join("; ", errors) : null);
+            PublishedCount: articles.Count,
+            PostIds: Array.Empty<string>(),
+            Message: summaryMsg);
     }
 
     public static string FormatSingleArticleForHejto(NewsArticle article)
@@ -166,6 +128,23 @@ public static class PublishHejtoArticlesSeparatelyCommandHandler
         sb.AppendLine(string.Join(" ", tags));
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Konwertuje indeks liczony od 0 na 1-bazową pozycję kolejności (numerację porządkową 1..N) dla ludzi i logów.
+    /// </summary>
+    private static int ToOneBasedPosition(int zeroBasedIndex) => zeroBasedIndex + 1;
+
+    /// <summary>
+    /// Wylicza opóźnienie harmonogramowania dla artykułu o danym indeksie w kolejce.
+    /// </summary>
+    private static TimeSpan CalculatePublicationDelay(int zeroBasedIndex, int intervalSeconds) =>
+        TimeSpan.FromSeconds(zeroBasedIndex * intervalSeconds);
+
+    /// <summary>
+    /// Wylicza szacowany łączny czas trwania publikacji całej partii artykułów.
+    /// </summary>
+    private static TimeSpan CalculateTotalDuration(int totalCount, int intervalSeconds) =>
+        totalCount <= 1 ? TimeSpan.Zero : TimeSpan.FromSeconds((totalCount - 1) * intervalSeconds);
 
     private static string SanitizeTag(string? text)
     {
