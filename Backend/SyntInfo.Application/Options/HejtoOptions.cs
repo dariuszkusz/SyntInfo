@@ -17,5 +17,4 @@ public class HejtoOptions : IConfigurableOptions, IHttpClientOptions
     public bool UseMock { get; set; }
     public bool PublishArticlesSeparately { get; set; } = true;
     public int DelayBetweenPostsSeconds { get; set; } = 60;
-    public int DelayBetweenPostsMs { get; set; } = 1500;
 }
