@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text;
 using Telegram.Bot;
@@ -39,46 +40,49 @@ public class TelegramNotificationService : ITelegramNotificationService
         return new TelegramBotClient(token);
     }
 
+    private bool TryGetChatContext([NotNullWhen(true)] out ITelegramBotClient? client, out long chatId)
+    {
+        chatId = 0;
+        if (_telegramOptions.UseMock)
+        {
+            client = null;
+            return false;
+        }
+
+        client = ResolveClient();
+        var chatIdStr = _telegramOptions.AdminChatId;
+
+        return client != null &&
+               !string.IsNullOrWhiteSpace(chatIdStr) &&
+               !chatIdStr.Contains("PLACEHOLDER") &&
+               long.TryParse(chatIdStr, out chatId);
+    }
+
     public async Task<long> SendDraftToAdminAsync(SocialPostDraft draft, NewsArticle article, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || chatIdStr.Contains("PLACEHOLDER"))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             _logger.LogInformation("TelegramNotificationService [MOCK/TEST]: Nowy szkic [{Platform}] dla artykułu '{Title}' (DraftId: {DraftId})",
                 draft.PlatformType, article.Title, draft.Id);
             return Random.Shared.Next(1000, 99999);
         }
 
-        if (!long.TryParse(chatIdStr, out var chatId))
-        {
-            _logger.LogWarning("Niepoprawny format Telegram:AdminChatId: {Value}", chatIdStr);
-            return 0;
-        }
-
         var platformIcon = draft.PlatformType switch
         {
-            SocialPlatformType.Wykop => "🟦 Wykop v3",
+            SocialPlatformType.Wykop => "🟦 Wykop",
             SocialPlatformType.Hejto => "🟩 Hejto",
             SocialPlatformType.Facebook => "🔷 Facebook",
             SocialPlatformType.Newsletter => "📧 Newsletter",
             _ => draft.PlatformType.ToString()
         };
 
-        var encodedTitle = WebUtility.HtmlEncode(article.Title);
-        var encodedContent = WebUtility.HtmlEncode(draft.Content);
+        var encodedTitle = FormatHtmlText(article.Title, 200, singleLine: true);
+        var encodedContent = FormatHtmlText(draft.Content, 2900, suffix: "\n\n[...skrócono treść...]");
 
         var messageText = $"<b>[{platformIcon}] Propozycja wpisu</b>\n" +
                           $"<b>Artykuł:</b> {encodedTitle}\n" +
                           $"<b>ID:</b> <code>{draft.Id}</code>\n\n" +
                           $"{encodedContent}";
-
-        if (messageText.Length > 4000)
-        {
-            messageText = messageText[..3950] + "\n\n<i>[...skrócono treść...]</i>";
-        }
 
         var inlineKeyboard = new InlineKeyboardMarkup(new[]
         {
@@ -133,35 +137,20 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task UpdateDraftMessageAsync(long messageId, SocialPostDraft draft, string decisionSummary, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || chatIdStr.Contains("PLACEHOLDER"))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             _logger.LogInformation("TelegramNotificationService [MOCK/TEST]: Aktualizacja wiadomości {MessageId}: {Summary}", messageId, decisionSummary);
             return;
         }
 
-        if (!long.TryParse(chatIdStr, out var chatId))
-        {
-            return;
-        }
-
         try
         {
-            var encodedContent = WebUtility.HtmlEncode(draft.Content);
+            var encodedContent = FormatHtmlText(draft.Content, 2900, suffix: "\n\n[...skrócono treść...]");
             var updatedText = $"<b>[{draft.PlatformType}] {decisionSummary}</b>\n" +
                               $"<b>ID:</b> <code>{draft.Id}</code>\n" +
                               $"<b>Data:</b> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC\n\n" +
                               $"{encodedContent}";
 
-            if (updatedText.Length > 4000)
-            {
-                updatedText = updatedText[..3950] + "\n\n<i>[...skrócono treść...]</i>";
-            }
-
-            // Edytujemy treść i usuwamy przyciski akcji
             await client.EditMessageText(
                 chatId: new ChatId(chatId),
                 messageId: (int)messageId,
@@ -180,34 +169,13 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task<long> SendArticleForCurationAsync(NewsArticle article, bool isSelected, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || chatIdStr.Contains("PLACEHOLDER") || !long.TryParse(chatIdStr, out var chatId))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             _logger.LogInformation("TelegramNotificationService [MOCK/TEST]: Preselekcja artykułu '{Title}' (Selected: {IsSelected})", article.Title, isSelected);
             return Random.Shared.Next(1000, 99999);
         }
 
-        var statusIcon = isSelected ? "✅ WYBRANO DO WYDANIA" : "⏳ CZEKA NA DECYZJĘ";
-        var btnText = isSelected ? "➖ Pomiń / Usuń z wydania" : "➕ Wybierz do wydania InfoSkrót";
-        var encodedTitle = WebUtility.HtmlEncode(article.Title);
-        var encodedSummary = WebUtility.HtmlEncode(article.SummaryText);
-        var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
-
-        var text = $"<b>[{statusIcon}]</b>\n\n" +
-                   $"<b>📌 {encodedTitle}</b>\n\n" +
-                   $"{encodedSummary}\n\n" +
-                   $"🔗 <a href=\"{primaryUrl}\">Czytaj źródło</a>\n" +
-                   $"🆔 <code>{article.Id}</code>";
-
-        if (text.Length > 4000) text = text[..3950] + "...";
-
-        var keyboard = new InlineKeyboardMarkup(new[]
-        {
-            new[] { InlineKeyboardButton.WithCallbackData(btnText, $"curate_toggle:{article.Id}") }
-        });
+        var (text, keyboard) = BuildArticleCurationCard(article, isSelected);
 
         try
         {
@@ -229,33 +197,12 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task UpdateCurationMessageAsync(long messageId, NewsArticle article, bool isSelected, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             return;
         }
 
-        var statusIcon = isSelected ? "✅ WYBRANO DO WYDANIA" : "⏳ CZEKA NA DECYZJĘ";
-        var btnText = isSelected ? "➖ Usuń z wydania" : "➕ Wybierz do wydania InfoSkrót";
-        var encodedTitle = WebUtility.HtmlEncode(article.Title);
-        var encodedSummary = WebUtility.HtmlEncode(article.SummaryText);
-        var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
-
-        var text = $"<b>[{statusIcon}]</b>\n\n" +
-                   $"<b>📌 {encodedTitle}</b>\n\n" +
-                   $"{encodedSummary}\n\n" +
-                   $"🔗 <a href=\"{primaryUrl}\">Czytaj źródło</a>\n" +
-                   $"🆔 <code>{article.Id}</code>";
-
-        if (text.Length > 4000) text = text[..3950] + "...";
-
-        var keyboard = new InlineKeyboardMarkup(new[]
-        {
-            new[] { InlineKeyboardButton.WithCallbackData(btnText, $"curate_toggle:{article.Id}") }
-        });
+        var (text, keyboard) = BuildArticleCurationCard(article, isSelected);
 
         try
         {
@@ -275,11 +222,7 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task<long> SendDigestControlPanelAsync(int selectedCount, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             return Random.Shared.Next(1000, 99999);
         }
@@ -313,11 +256,7 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task<long> SendDigestControlPanelAsync(int polandCount, int worldCount, int positiveCount, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             return Random.Shared.Next(1000, 99999);
         }
@@ -345,11 +284,7 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task UpdateDigestControlPanelAsync(long messageId, int polandCount, int worldCount, int positiveCount, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             return;
         }
@@ -375,60 +310,14 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task<long> SendThematicBatchAsync(SourceRegion region, IReadOnlyList<NewsArticle> articles, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             _logger.LogInformation("TelegramNotificationService [MOCK/TEST]: Wysłano zbiorczą partię dla regionu {Region} ({Count} artykułów)", region, articles.Count);
             return Random.Shared.Next(1000, 99999);
         }
 
         var maxLimit = _curationOptions.GetMaxSelectionLimit(region);
-        var header = region switch
-        {
-            SourceRegion.Poland => $"🇵🇱 <b>WYDANIE DNIA — POLSKA</b> (Wybierz maks. {maxLimit})",
-            SourceRegion.World => $"🌍 <b>WYDANIE DNIA — ŚWIAT</b> (Wybierz maks. {maxLimit})",
-            SourceRegion.Positive => $"☀️ <b>WYDANIE DNIA — POZYTYWNE</b> (Wybierz maks. {maxLimit})",
-            _ => "🗞️ <b>PROPOZYCJE ARTYKUŁÓW</b>"
-        };
-
-        var sb = new StringBuilder();
-        sb.AppendLine(header);
-        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-        for (var i = 0; i < articles.Count; i++)
-        {
-            var art = articles[i];
-            var num = i + 1;
-            var numIcon = num switch
-            {
-                1 => "1️⃣", 2 => "2️⃣", 3 => "3️⃣", 4 => "4️⃣", 5 => "5️⃣",
-                6 => "6️⃣", 7 => "7️⃣", 8 => "8️⃣", 9 => "9️⃣", 10 => "🔟",
-                _ => $"#{num}"
-            };
-
-            var encodedTitle = WebUtility.HtmlEncode(art.Title);
-            var primaryUrl = art.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
-            var domain = GetDomain(primaryUrl);
-            var teaser = CleanTeaser(art.SummaryText, 140);
-            var encodedTeaser = WebUtility.HtmlEncode(teaser);
-
-            sb.AppendLine($"{numIcon} <b>{encodedTitle}</b>");
-            sb.AppendLine($"   🔗 <a href=\"{primaryUrl}\">{domain}</a> • <i>{encodedTeaser}</i>");
-            sb.AppendLine();
-        }
-
-        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        sb.AppendLine($"<i>Kliknij numer poniżej, aby wybrać (maks. {maxLimit})</i>");
-
-        var text = sb.ToString();
-        if (text.Length > 4000)
-        {
-            text = text[..3950] + "\n\n<i>[...skrócono listę...]</i>";
-        }
-
+        var text = BuildThematicBatchText(region, articles, maxLimit);
         var keyboard = BuildThematicMarkup(articles);
 
         try
@@ -451,11 +340,7 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task UpdateThematicBatchMarkupAsync(long messageId, SourceRegion region, IReadOnlyList<NewsArticle> articles, CancellationToken cancellationToken = default)
     {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
+        if (!TryGetChatContext(out var client, out var chatId))
         {
             return;
         }
@@ -478,10 +363,13 @@ public class TelegramNotificationService : ITelegramNotificationService
 
     public async Task AnswerCallbackQueryAsync(string callbackQueryId, string? text = null, bool showAlert = false, CancellationToken cancellationToken = default)
     {
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
+        if (_telegramOptions.UseMock || string.IsNullOrWhiteSpace(callbackQueryId))
+        {
+            return;
+        }
 
-        if (isMock || client == null || string.IsNullOrWhiteSpace(callbackQueryId))
+        var client = ResolveClient();
+        if (client == null)
         {
             return;
         }
@@ -496,6 +384,131 @@ public class TelegramNotificationService : ITelegramNotificationService
         }
     }
 
+    public async Task<long> SendSimpleNotificationAsync(string message, CancellationToken cancellationToken = default)
+    {
+        if (!TryGetChatContext(out var client, out var chatId))
+        {
+            _logger.LogInformation("TelegramNotificationService [MOCK]: {Message}", message);
+            return Random.Shared.Next(1000, 99999);
+        }
+
+        try
+        {
+            var msg = await ExecuteWithRetryAsync(() => client.SendMessage(
+                chatId: new ChatId(chatId),
+                text: message,
+                parseMode: ParseMode.Html,
+                cancellationToken: cancellationToken), cancellationToken);
+
+            return msg.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd wysyłania powiadomienia na Telegram");
+            return 0;
+        }
+    }
+
+    #region Single Source of Truth: UI Card & Text Builders
+
+    private static (string Text, InlineKeyboardMarkup Markup) BuildArticleCurationCard(NewsArticle article, bool isSelected)
+    {
+        var statusIcon = isSelected ? "✅ WYBRANO DO WYDANIA" : "⏳ CZEKA NA DECYZJĘ";
+        var btnText = isSelected ? "➖ Usuń z wydania" : "➕ Wybierz do wydania InfoSkrót";
+        var encodedTitle = FormatHtmlText(article.Title, 200, singleLine: true);
+        var encodedSummary = FormatHtmlText(article.SummaryText, 2800);
+        var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+        var encodedUrl = WebUtility.HtmlEncode(primaryUrl);
+
+        var text = $"<b>[{statusIcon}]</b>\n\n" +
+                   $"<b>📌 {encodedTitle}</b>\n\n" +
+                   $"{encodedSummary}\n\n" +
+                   $"🔗 <a href=\"{encodedUrl}\">Czytaj źródło</a>\n" +
+                   $"🆔 <code>{article.Id}</code>";
+
+        var markup = new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData(btnText, $"curate_toggle:{article.Id}") }
+        });
+
+        return (text, markup);
+    }
+
+    private string BuildThematicBatchText(SourceRegion region, IReadOnlyList<NewsArticle> articles, int maxLimit)
+    {
+        const int maxSafeLength = 3900; // Bezpieczny limit poniżej 4096 UTF-16
+        var header = region switch
+        {
+            SourceRegion.Poland => $"🇵🇱 <b>WYDANIE DNIA — POLSKA</b> (Wybierz maks. {maxLimit})",
+            SourceRegion.World => $"🌍 <b>WYDANIE DNIA — ŚWIAT</b> (Wybierz maks. {maxLimit})",
+            SourceRegion.Positive => $"☀️ <b>WYDANIE DNIA — POZYTYWNE</b> (Wybierz maks. {maxLimit})",
+            _ => "🗞️ <b>PROPOZYCJE ARTYKUŁÓW</b>"
+        };
+
+        var footer = $"━━━━━━━━━━━━━━━━━━━━━━━━━━\n<i>Kliknij numer poniżej, aby wybrać (maks. {maxLimit})</i>";
+
+        var sb = new StringBuilder();
+        sb.AppendLine(header);
+        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+        for (var i = 0; i < articles.Count; i++)
+        {
+            var art = articles[i];
+            var num = i + 1;
+            var numIcon = num switch
+            {
+                1 => "1️⃣",
+                2 => "2️⃣",
+                3 => "3️⃣",
+                4 => "4️⃣",
+                5 => "5️⃣",
+                6 => "6️⃣",
+                7 => "7️⃣",
+                8 => "8️⃣",
+                9 => "9️⃣",
+                10 => "🔟",
+                _ => $"#{num}"
+            };
+
+            var encodedTitle = FormatHtmlText(art.Title, 100, singleLine: true);
+            var primaryUrl = art.SourceUrls.FirstOrDefault() ?? "https://infoskrot.pl";
+            var encodedUrl = WebUtility.HtmlEncode(primaryUrl);
+            var domain = GetDomain(primaryUrl);
+
+            var remainingArticles = articles.Count - i;
+            var availableTotal = maxSafeLength - sb.Length - footer.Length;
+
+            var baseEntry = $"{numIcon} <b>{encodedTitle}</b>\n   🔗 <a href=\"{encodedUrl}\">{domain}</a>";
+
+            // Jeśli nawet bazowa linijka się nie zmieści, przerywamy dodawanie kolejnych pozycji w bezpieczny sposób
+            if (baseEntry.Length + 4 > availableTotal)
+            {
+                sb.AppendLine($"<i>[...oraz {remainingArticles} kolejnych propozycji...]</i>\n");
+                break;
+            }
+
+            // Dynamiczny budżet teasera — zapobiega przekroczeniu limitu bez ucinania tagów HTML
+            var perArticleBudget = availableTotal / remainingArticles;
+            var maxTeaserLen = Math.Clamp(perArticleBudget - baseEntry.Length - 10, 0, 75);
+
+            if (maxTeaserLen >= 25 && !string.IsNullOrWhiteSpace(art.SummaryText))
+            {
+                var encodedTeaser = FormatHtmlText(art.SummaryText, maxTeaserLen, singleLine: true);
+                sb.AppendLine($"{numIcon} <b>{encodedTitle}</b>");
+                sb.AppendLine($"   🔗 <a href=\"{encodedUrl}\">{domain}</a> • <i>{encodedTeaser}</i>");
+            }
+            else
+            {
+                sb.AppendLine(baseEntry);
+            }
+
+            sb.AppendLine();
+        }
+
+        sb.Append(footer);
+        return sb.ToString();
+    }
+
     private static InlineKeyboardMarkup BuildThematicMarkup(IReadOnlyList<NewsArticle> articles)
     {
         var buttons = new List<InlineKeyboardButton>();
@@ -507,7 +520,6 @@ public class TelegramNotificationService : ITelegramNotificationService
             buttons.Add(InlineKeyboardButton.WithCallbackData(text, $"curate_toggle:{articles[i].Id}"));
         }
 
-        // Podział przycisków na wiersze po 5
         var rows = buttons.Chunk(5).Select(chunk => chunk.ToArray()).ToArray();
         return new InlineKeyboardMarkup(rows);
     }
@@ -534,6 +546,37 @@ public class TelegramNotificationService : ITelegramNotificationService
         });
     }
 
+    #endregion
+
+    #region Single Source of Truth: Text Processing & Truncation
+
+    private static string NormalizeWhitespace(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var singleLine = text.Replace("\r", " ").Replace("\n", " ").Trim();
+        while (singleLine.Contains("  "))
+        {
+            singleLine = singleLine.Replace("  ", " ");
+        }
+        return singleLine;
+    }
+
+    private static string Truncate(string? text, int maxLength, string suffix = "...")
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var trimmed = text.Trim();
+        if (trimmed.Length <= maxLength) return trimmed;
+        var cutLen = Math.Max(0, maxLength - suffix.Length);
+        return trimmed[..cutLen].TrimEnd() + suffix;
+    }
+
+    private static string FormatHtmlText(string? text, int maxLength, bool singleLine = false, string suffix = "...")
+    {
+        var normalized = singleLine ? NormalizeWhitespace(text) : (text ?? string.Empty);
+        var truncated = Truncate(normalized, maxLength, suffix);
+        return WebUtility.HtmlEncode(truncated);
+    }
+
     private static string GetDomain(string url)
     {
         try
@@ -548,45 +591,5 @@ public class TelegramNotificationService : ITelegramNotificationService
         }
     }
 
-    private static string CleanTeaser(string text, int maxLength)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        var singleLine = text.Replace("\r", " ").Replace("\n", " ").Trim();
-        while (singleLine.Contains("  "))
-        {
-            singleLine = singleLine.Replace("  ", " ");
-        }
-
-        if (singleLine.Length <= maxLength) return singleLine;
-        return singleLine[..maxLength].TrimEnd() + "...";
-    }
-
-    public async Task<long> SendSimpleNotificationAsync(string message, CancellationToken cancellationToken = default)
-    {
-        var chatIdStr = _telegramOptions.AdminChatId;
-        var isMock = _telegramOptions.UseMock;
-        var client = ResolveClient();
-
-        if (isMock || client == null || string.IsNullOrWhiteSpace(chatIdStr) || !long.TryParse(chatIdStr, out var chatId))
-        {
-            _logger.LogInformation("TelegramNotificationService [MOCK]: {Message}", message);
-            return Random.Shared.Next(1000, 99999);
-        }
-
-        try
-        {
-            var msg = await ExecuteWithRetryAsync(() => client.SendMessage(
-                chatId: new ChatId(chatId),
-                text: message,
-                parseMode: ParseMode.Html,
-                cancellationToken: cancellationToken), cancellationToken);
-
-            return msg.Id;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Błąd wysyłania powiadomienia na Telegram");
-            return 0;
-        }
-    }
+    #endregion
 }

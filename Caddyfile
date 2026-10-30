@@ -17,3 +17,5 @@ infoskrot.pl {
         reverse_proxy frontend:80
     }
 }
+
+import /etc/caddy/conf.d/*.caddy
