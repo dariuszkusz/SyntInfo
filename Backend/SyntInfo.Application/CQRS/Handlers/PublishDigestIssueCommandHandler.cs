@@ -139,7 +139,7 @@ public static class PublishDigestIssueCommandHandler
             uow.NewsArticles.Update(article);
         }
 
-        // 4b. Archiwizacja niewybranych propozycji z bazy, aby nie powracały w kolejnych cyklach kuracji
+        // 4b. Archiwizacja niewybranych propozycji z bazy, aby nie powracały w kolejnych cyklach kuracji i były ukryte w aplikacji/API
         var unselectedArticles = await uow.NewsArticles.Query()
             .Where(a => a.IsActive && a.DigestPublishedAt == null && !selectedIds.Contains(a.Id))
             .ToListAsync(cancellationToken);
@@ -148,6 +148,7 @@ public static class PublishDigestIssueCommandHandler
         {
             unselected.DigestPublishedAt = DateTime.UtcNow;
             unselected.IsSelectedForDigest = false;
+            unselected.IsActive = false;
             uow.NewsArticles.Update(unselected);
         }
 
