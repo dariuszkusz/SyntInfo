@@ -137,14 +137,7 @@ try
     app.UseAuthorization();
     app.MapControllers();
 
-    using (var scope = app.Services.CreateScope())
-    {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        Log.Information("Applying database migrations...");
-        db.Database.Migrate();
-    }
-
-    // Seed database
+    // Migracje i seedowanie bazy danych
     await DataSeeder.SeedAsync(app.Services);
 
     Log.Information("Backend SyntInfo gotowy do pracy.");

@@ -34,7 +34,7 @@ public class MailerLiteClient : IMailerLiteClient
         if (isMock || string.IsNullOrWhiteSpace(apiKey) || apiKey.Contains("PLACEHOLDER"))
         {
             _logger.LogInformation("MailerLiteClient [MOCK/TEST]: Tworzenie i wysyłka kampanii (Temat: {Subject})", subject);
-            return $"mailerlite-mock-{Guid.NewGuid():N}[..8]";
+            return $"mailerlite-mock-{Guid.NewGuid():N}"[..24];
         }
 
         var client = _httpClientFactory.CreateClient("MailerLiteClient");

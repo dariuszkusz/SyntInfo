@@ -25,13 +25,7 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
 
     public async Task<List<NewsArticle>> GetActiveArticlesAsync(int limit, CancellationToken cancellationToken = default)
     {
-        return await _db.NewsArticles
-            .Where(a => a.IsActive 
-                     && a.SummaryText.Length >= 40 
-                     && !a.Title.Contains("Brak faktów")
-                     && !a.SummaryText.Contains("User Safety")
-                     && !a.SummaryText.Contains("Brak faktów")
-                     && !a.SummaryText.Contains("Nie podano danych"))
+        return await FilterValidActive(_db.NewsArticles)
             .OrderByDescending(a => a.PublishedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -39,14 +33,8 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
 
     public async Task<List<NewsArticle>> GetArticlesForCurationAsync(int limit, CancellationToken cancellationToken = default)
     {
-        return await _db.NewsArticles
-            .Where(a => a.IsActive 
-                     && a.DigestPublishedAt == null
-                     && a.SummaryText.Length >= 40 
-                     && !a.Title.Contains("Brak faktów")
-                     && !a.SummaryText.Contains("User Safety")
-                     && !a.SummaryText.Contains("Brak faktów")
-                     && !a.SummaryText.Contains("Nie podano danych"))
+        return await FilterValidActive(_db.NewsArticles)
+            .Where(a => a.DigestPublishedAt == null)
             .OrderByDescending(a => a.PublishedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -54,17 +42,8 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
 
     public async Task<List<NewsArticle>> GetArticlesForCurationByRegionAsync(SourceRegion region, int limit, CancellationToken cancellationToken = default)
     {
-        return await _db.NewsArticles
-            .Where(a => a.IsActive 
-                     && a.Region == region
-                     && a.DigestPublishedAt == null
-                     && a.SummaryText.Length >= 40 
-                     && !a.Title.Contains("Brak faktów")
-                     && !a.Title.Contains("Brak danych")
-                     && !a.SummaryText.Contains("User Safety")
-                     && !a.SummaryText.Contains("safety filter")
-                     && !a.SummaryText.Contains("Brak faktów")
-                     && !a.SummaryText.Contains("Nie podano danych"))
+        return await FilterValidActive(_db.NewsArticles)
+            .Where(a => a.Region == region && a.DigestPublishedAt == null)
             .OrderByDescending(a => a.PublishedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -79,17 +58,8 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
     public async Task<List<NewsArticle>> GetRecentArticlesAsync(SourceRegion? region, int page, int pageSize, CancellationToken cancellationToken = default)
     {
         var cutoffDate = DateTime.UtcNow.AddHours(-24);
-        var query = _db.NewsArticles
-            .Include(a => a.Category)
-            .Where(a => a.IsActive 
-                     && a.PublishedAt >= cutoffDate
-                     && a.SummaryText.Length >= 40
-                     && !a.Title.Contains("Brak faktów")
-                     && !a.Title.Contains("Brak danych")
-                     && !a.SummaryText.Contains("User Safety")
-                     && !a.SummaryText.Contains("safety filter")
-                     && !a.SummaryText.Contains("Brak faktów")
-                     && !a.SummaryText.Contains("Nie podano danych"));
+        var query = FilterValidActive(_db.NewsArticles.Include(a => a.Category))
+            .Where(a => a.PublishedAt >= cutoffDate);
 
         if (region.HasValue)
         {
@@ -102,5 +72,16 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }
-}
 
+    private static IQueryable<NewsArticle> FilterValidActive(IQueryable<NewsArticle> query)
+    {
+        return query.Where(a => a.IsActive
+                             && a.SummaryText.Length >= 40
+                             && !a.Title.Contains("Brak faktów")
+                             && !a.Title.Contains("Brak danych")
+                             && !a.SummaryText.Contains("User Safety")
+                             && !a.SummaryText.Contains("safety filter")
+                             && !a.SummaryText.Contains("Brak faktów")
+                             && !a.SummaryText.Contains("Nie podano danych"));
+    }
+}

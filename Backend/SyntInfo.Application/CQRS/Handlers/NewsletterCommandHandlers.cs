@@ -3,16 +3,19 @@ using SyntInfo.Application.CQRS.Commands;
 
 namespace SyntInfo.Application.CQRS.Handlers;
 
-public static class SubscribeNewsletterCommandHandler
+internal static class NewsletterEmailValidator
 {
-    private static bool IsValidEmail([NotNullWhen(true)] string? email)
+    public static bool IsValid([NotNullWhen(true)] string? email)
     {
         if (string.IsNullOrWhiteSpace(email)) return false;
         return System.Net.Mail.MailAddress.TryCreate(email, out var address)
                && address.Address == email
                && email.Contains('.');
     }
+}
 
+public static class SubscribeNewsletterCommandHandler
+{
     public static async Task<NewsletterOperationResult> Handle(
         SubscribeNewsletterCommand command,
         IMailerLiteClient mailerLiteClient,
@@ -21,7 +24,7 @@ public static class SubscribeNewsletterCommandHandler
     {
         var email = command.Email?.Trim();
 
-        if (!IsValidEmail(email))
+        if (!NewsletterEmailValidator.IsValid(email))
         {
             logger.LogWarning("Niepoprawny format adresu e-mail: '{Email}'", command.Email);
             return new NewsletterOperationResult(false, "Podaj poprawny adres e-mail.");
@@ -49,14 +52,6 @@ public static class SubscribeNewsletterCommandHandler
 
 public static class UnsubscribeNewsletterCommandHandler
 {
-    private static bool IsValidEmail([NotNullWhen(true)] string? email)
-    {
-        if (string.IsNullOrWhiteSpace(email)) return false;
-        return System.Net.Mail.MailAddress.TryCreate(email, out var address)
-               && address.Address == email
-               && email.Contains('.');
-    }
-
     public static async Task<NewsletterOperationResult> Handle(
         UnsubscribeNewsletterCommand command,
         IMailerLiteClient mailerLiteClient,
@@ -65,7 +60,7 @@ public static class UnsubscribeNewsletterCommandHandler
     {
         var email = command.Email?.Trim();
 
-        if (!IsValidEmail(email))
+        if (!NewsletterEmailValidator.IsValid(email))
         {
             logger.LogWarning("Niepoprawny format adresu e-mail przy wypisie: '{Email}'", command.Email);
             return new NewsletterOperationResult(false, "Podaj poprawny adres e-mail.");

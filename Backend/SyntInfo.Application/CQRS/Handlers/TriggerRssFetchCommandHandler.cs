@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using CodeHollow.FeedReader;
 using SyntInfo.Application.CQRS.Commands;
 using Wolverine;
 using System.Text.Json;
@@ -88,8 +87,8 @@ public class TriggerRssFetchCommandHandler
 
                     if (!exists)
                     {
-                        var content = GetBestContent(item);
-                        var imageUrl = ExtractImageUrl(item);
+                        var content = RssFeedItemExtractor.GetBestContent(item);
+                        var imageUrl = RssFeedItemExtractor.ExtractImageUrl(item);
 
                         articles.Add(new SummarizeArticleCommand(
                             item.Title,
@@ -205,7 +204,6 @@ public class TriggerRssFetchCommandHandler
         return commands;
     }
 
-
     private async Task DeactivateExpiredNews(CancellationToken cancellationToken)
     {
         var expiredCutoff = DateTime.UtcNow.AddHours(-24);
@@ -233,7 +231,6 @@ public class TriggerRssFetchCommandHandler
             var items = await _newsDiscoveryService.DiscoverNewsAsync(region, cancellationToken);
             foreach (var item in items)
             {
-                // Sprawdź czy już nie mamy tego linku lub tytułu w bazie
                 var exists = await _uow.NewsArticles.ExistsByUrlOrTitleAsync(item.Url, item.Title, cancellationToken);
 
                 if (!exists)
@@ -243,7 +240,7 @@ public class TriggerRssFetchCommandHandler
                         item.Content,
                         item.Url,
                         item.PublishedAt,
-                        Guid.Empty, // Brak konkretnego źródła RSS
+                        Guid.Empty,
                         region
                     ));
                 }
@@ -257,7 +254,11 @@ public class TriggerRssFetchCommandHandler
         return discovered;
     }
 
-    private async Task<List<SummarizeArticleCommand>> GetCommandsToExecuteAsync(SourceRegion region, List<SummarizeArticleCommand> newCandidates, int maxPerRegion, CancellationToken cancellationToken)
+    private async Task<List<SummarizeArticleCommand>> GetCommandsToExecuteAsync(
+        SourceRegion region,
+        List<SummarizeArticleCommand> newCandidates,
+        int maxPerRegion,
+        CancellationToken cancellationToken)
     {
         var commandsToExecute = new List<SummarizeArticleCommand>();
         try
@@ -345,7 +346,6 @@ public class TriggerRssFetchCommandHandler
             var startOfDay = candidate.PublishedAt.Date.ToUniversalTime();
             var endOfDay = startOfDay.AddDays(1);
 
-            // Szukamy w bazie artykułów z tego samego dnia o podobieństwie > 0.82 (CosineDistance < 0.18)
             var similarDbArticles = await _uow.Repository<NewsArticle>().Query()
                 .Where(a => a.Embedding != null
                          && a.PublishedAt >= startOfDay
@@ -357,7 +357,6 @@ public class TriggerRssFetchCommandHandler
 
             if (primaryDbArticle != null)
             {
-                // Szukamy istniejącego klastra powiązanego z tym samym artykułem z bazy
                 var existingCluster = clusters.FirstOrDefault(c => c.ExistingArticle != null && c.ExistingArticle.Id == primaryDbArticle.Id);
                 if (existingCluster != null)
                 {
@@ -375,21 +374,14 @@ public class TriggerRssFetchCommandHandler
             }
             else
             {
-                // Szukamy pasującego klastra wśród już utworzonych
                 ArticleCluster? matchedCluster = null;
                 foreach (var cluster in clusters)
                 {
-                    double similarity = 0;
-                    if (cluster.ExistingArticle != null && cluster.ExistingArticle.Embedding != null)
-                    {
-                        similarity = CalculateCosineSimilarity(embedding, cluster.ExistingArticle.Embedding.ToArray());
-                    }
-                    else
-                    {
-                        similarity = CalculateCosineSimilarity(embedding, cluster.RepresentativeEmbedding);
-                    }
+                    var referenceVec = cluster.ExistingArticle?.Embedding != null
+                        ? cluster.ExistingArticle.Embedding.ToArray()
+                        : cluster.RepresentativeEmbedding;
 
-                    if (similarity > 0.82)
+                    if (ArticleClusterConsolidator.CalculateCosineSimilarity(embedding, referenceVec) > 0.82)
                     {
                         matchedCluster = cluster;
                         break;
@@ -412,167 +404,6 @@ public class TriggerRssFetchCommandHandler
             }
         }
 
-        var consolidatedCommands = new List<SummarizeArticleCommand>();
-        foreach (var cluster in clusters)
-        {
-            consolidatedCommands.Add(ConsolidateCluster(cluster));
-        }
-
-        return consolidatedCommands;
-    }
-
-    private SummarizeArticleCommand ConsolidateCluster(ArticleCluster cluster)
-    {
-        var allUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (cluster.ExistingArticle != null)
-        {
-            foreach (var url in cluster.ExistingArticle.SourceUrls)
-            {
-                allUrls.Add(url);
-            }
-        }
-
-        foreach (var cand in cluster.Candidates)
-        {
-            allUrls.Add(cand.Url);
-            if (cand.AdditionalUrls != null)
-            {
-                foreach (var url in cand.AdditionalUrls)
-                {
-                    allUrls.Add(url);
-                }
-            }
-        }
-
-        var urlList = allUrls.ToList();
-        var primaryUrl = urlList.FirstOrDefault() ?? string.Empty;
-        var additionalUrls = urlList.Skip(1).ToList();
-
-        var representative = cluster.Candidates.OrderByDescending(c => c.Content.Length).First();
-
-        var contentBuilder = new System.Text.StringBuilder();
-
-        if (cluster.ExistingArticle != null)
-        {
-            contentBuilder.AppendLine($"[ISTNIEJĄCE PODSUMOWANIE]: {cluster.ExistingArticle.SummaryText}");
-            if (!string.IsNullOrWhiteSpace(cluster.ExistingArticle.DeepContent))
-            {
-                contentBuilder.AppendLine($"[ISTNIEJĄCE FAKTY]: {cluster.ExistingArticle.DeepContent}");
-            }
-            contentBuilder.AppendLine();
-        }
-
-        contentBuilder.AppendLine("[NOWE MATERIAŁY ŹRÓDŁOWE]:");
-        foreach (var cand in cluster.Candidates)
-        {
-            contentBuilder.AppendLine($"Nagłówek: {cand.Title}");
-            contentBuilder.AppendLine($"Treść: {cand.Content}");
-            contentBuilder.AppendLine("---");
-        }
-
-        var consolidatedTitle = cluster.ExistingArticle != null ? cluster.ExistingArticle.Title : representative.Title;
-        var primaryImageUrl = cluster.ExistingArticle?.ImageUrl ?? cluster.Candidates.FirstOrDefault(c => !string.IsNullOrEmpty(c.ImageUrl))?.ImageUrl;
-
-        return new SummarizeArticleCommand(
-            consolidatedTitle,
-            contentBuilder.ToString(),
-            primaryUrl,
-            cluster.ExistingArticle != null ? cluster.ExistingArticle.PublishedAt : representative.PublishedAt,
-            representative.SourceId,
-            representative.Region,
-            additionalUrls,
-            cluster.ExistingArticle?.Id,
-            primaryImageUrl
-        );
-    }
-
-    private static string? ExtractImageUrl(CodeHollow.FeedReader.FeedItem item)
-    {
-        try
-        {
-            if (item.SpecificItem?.Element != null)
-            {
-                var el = item.SpecificItem.Element;
-                var enclosure = el.Elements().FirstOrDefault(e => e.Name.LocalName.Equals("enclosure", StringComparison.OrdinalIgnoreCase) && e.Attribute("type")?.Value.StartsWith("image/") == true);
-                if (enclosure != null)
-                {
-                    var url = enclosure.Attribute("url")?.Value;
-                    if (!string.IsNullOrWhiteSpace(url)) return url;
-                }
-
-                var media = el.Elements().FirstOrDefault(e => (e.Name.LocalName.Equals("content", StringComparison.OrdinalIgnoreCase) || e.Name.LocalName.Equals("thumbnail", StringComparison.OrdinalIgnoreCase)) && (e.Attribute("medium")?.Value == "image" || e.Attribute("url")?.Value.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) == true || e.Attribute("url")?.Value.EndsWith(".png", StringComparison.OrdinalIgnoreCase) == true || e.Attribute("type")?.Value.StartsWith("image/") == true || e.Attribute("url") != null));
-                if (media != null)
-                {
-                    var url = media.Attribute("url")?.Value;
-                    if (!string.IsNullOrWhiteSpace(url)) return url;
-                }
-            }
-
-            var contentToScan = $"{item.Description} {item.Content}";
-            if (!string.IsNullOrWhiteSpace(contentToScan))
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(contentToScan, @"<img[^>]+src=[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (match.Success)
-                {
-                    var url = match.Groups[1].Value;
-                    if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return url;
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Silently ignore extraction issues
-        }
-
-        return null;
-    }
-
-    private static string GetBestContent(FeedItem item)
-    {
-        var content = item.Content?.Trim();
-        var description = item.Description?.Trim();
-
-        // Wybierz dłuższy i bogatszy tekst spośród Content i Description
-        if (!string.IsNullOrWhiteSpace(content) && !string.IsNullOrWhiteSpace(description))
-        {
-            return content.Length >= description.Length ? content : description;
-        }
-
-        if (!string.IsNullOrWhiteSpace(content)) return content;
-        if (!string.IsNullOrWhiteSpace(description)) return description;
-
-        return item.Title?.Trim() ?? string.Empty;
-    }
-
-    private class ArticleCluster
-    {
-        public NewsArticle? ExistingArticle { get; set; }
-        public List<SummarizeArticleCommand> Candidates { get; set; } = new();
-        public float[] RepresentativeEmbedding { get; set; } = Array.Empty<float>();
-    }
-
-    private static double CalculateCosineSimilarity(float[] vec1, float[] vec2)
-    {
-        if (vec1.Length != vec2.Length)
-            return 0;
-
-        double dotProduct = 0;
-        double normA = 0;
-        double normB = 0;
-
-        for (int i = 0; i < vec1.Length; i++)
-        {
-            dotProduct += vec1[i] * vec2[i];
-            normA += vec1[i] * vec1[i];
-            normB += vec2[i] * vec2[i];
-        }
-
-        if (normA == 0 || normB == 0)
-            return 0;
-
-        return dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB));
+        return clusters.Select(ArticleClusterConsolidator.Consolidate).ToList();
     }
 }

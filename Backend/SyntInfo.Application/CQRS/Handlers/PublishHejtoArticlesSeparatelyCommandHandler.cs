@@ -100,7 +100,7 @@ public static class PublishHejtoArticlesSeparatelyCommandHandler
     {
         var sb = new StringBuilder();
         var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://www.infoskrót.pl";
-        var categoryTag = SanitizeTag(article.Category?.Name);
+        var categoryTag = TagFormattingHelper.SanitizeTag(article.Category?.Name);
         var regionTag = article.Region switch
         {
             SourceRegion.Poland => "polska",
