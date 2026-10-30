@@ -45,6 +45,7 @@ try
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<ProcessingOptions>>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<CurationOptions>>();
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<MailerLiteOptions>>();
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<HejtoOptions>>();
     });
 
 
