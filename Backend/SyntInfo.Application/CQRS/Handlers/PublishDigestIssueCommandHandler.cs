@@ -84,8 +84,7 @@ public static class PublishDigestIssueCommandHandler
 
                 if (separateResult.Success)
                 {
-                    var idsPreview = string.Join(", ", separateResult.PostIds);
-                    hejtoResult = $"✅ Opublikowano osobno {separateResult.PublishedCount}/{separateResult.TotalArticlesCount} wpisów (ID: {idsPreview})";
+                    hejtoResult = $"✅ Zaplanowano publikację {separateResult.PublishedCount}/{separateResult.TotalArticlesCount} wpisów w tle";
                 }
                 else
                 {
