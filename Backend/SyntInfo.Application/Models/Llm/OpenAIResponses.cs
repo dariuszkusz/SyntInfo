@@ -45,4 +45,7 @@ public class InfopigulaContent
 
     [JsonPropertyName("category")]
     public string Category { get; set; } = string.Empty;
+
+    [JsonPropertyName("tags")]
+    public List<string>? Tags { get; set; }
 }

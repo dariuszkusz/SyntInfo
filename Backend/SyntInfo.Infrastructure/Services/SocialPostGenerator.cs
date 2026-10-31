@@ -17,11 +17,11 @@ public class SocialPostGenerator : ISocialPostGenerator
     public async Task<string> GenerateContentForPlatformAsync(SocialPlatformType platform, NewsArticle article, CancellationToken cancellationToken = default)
     {
         var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://syntinfo.local";
-        var categoryTag = TagFormattingHelper.SanitizeTag(article.Category?.Name, "wiadomosci");
+        var hashtagsLine = TagFormattingHelper.FormatHashtagsLineForArticle(article);
 
         try
         {
-            var prompt = BuildPrompt(platform, article, primaryUrl, categoryTag);
+            var prompt = BuildPrompt(platform, article, primaryUrl, hashtagsLine);
             // Wykorzystujemy istniejącego klienta Gemini / OpenRouter z fallbackiem
             var factsContext = !string.IsNullOrWhiteSpace(article.DeepContent) ? article.DeepContent : article.SummaryText;
             var generatedText = await _googleAiStudioClient.GenerateSummaryFromFactsAsync(
@@ -41,7 +41,7 @@ public class SocialPostGenerator : ISocialPostGenerator
             _logger.LogWarning(ex, "Nie udało się wygenerować treści LLM dla platformy {Platform}. Używam szablonu awaryjnego.", platform);
         }
 
-        return GenerateFallbackTemplate(platform, article, primaryUrl, categoryTag);
+        return GenerateFallbackTemplate(platform, article, primaryUrl, hashtagsLine);
     }
 
     public Task<string> GenerateDigestContentForPlatformAsync(SocialPlatformType platform, IReadOnlyList<NewsArticle> articles, CancellationToken cancellationToken = default)
@@ -59,6 +59,7 @@ public class SocialPostGenerator : ISocialPostGenerator
     {
         var sb = new StringBuilder();
         var dateStr = DateTime.UtcNow.ToString("dd.MM.yyyy");
+        var digestHashtags = TagFormattingHelper.FormatHashtagsLineForDigest(articles);
 
         switch (platform)
         {
@@ -93,7 +94,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 sb.AppendLine();
                 sb.AppendLine("Więcej wiadomości i pełne archiwum: [www.infoskrót.pl](https://www.infoskrót.pl)");
                 sb.AppendLine();
-                sb.AppendLine("#wiadomosci #infoskrot #polska #swiat #polityka");
+                sb.AppendLine(digestHashtags);
                 break;
 
             case SocialPlatformType.Wykop:
@@ -117,7 +118,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 sb.AppendLine();
                 sb.AppendLine("Więcej skrótów wiadomości znajdziesz na: https://www.infoskrót.pl");
                 sb.AppendLine();
-                sb.AppendLine("#wiadomosci #infoskrot #polska #swiat");
+                sb.AppendLine(digestHashtags);
                 break;
 
             case SocialPlatformType.Newsletter:
@@ -144,7 +145,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 }
                 sb.AppendLine();
                 sb.AppendLine("Więcej na: https://www.infoskrót.pl");
-                sb.AppendLine("#infoskrot #wiadomosci");
+                sb.AppendLine(digestHashtags);
                 break;
         }
 
@@ -152,17 +153,17 @@ public class SocialPostGenerator : ISocialPostGenerator
     }
 
 
-    private static string BuildPrompt(SocialPlatformType platform, NewsArticle article, string primaryUrl, string categoryTag)
+    private static string BuildPrompt(SocialPlatformType platform, NewsArticle article, string primaryUrl, string hashtagsLine)
     {
         return platform switch
         {
             SocialPlatformType.Wykop =>
                 $"Napisz zwięzły wpis na mikroblog Wykop.pl (maksymalnie 400 znaków) na podstawie poniższych informacji. Tytuł: {article.Title}. " +
-                $"Dołącz 2-3 kluczowe fakty, link do źródła: {primaryUrl} oraz odpowiednie hashtagi: #wiadomosci #{categoryTag} #infoskrot. Zwróć tylko czystą treść wpisu.",
+                $"Dołącz 2-3 kluczowe fakty, link do źródła: {primaryUrl} oraz odpowiednie hashtagi: {hashtagsLine}. Zwróć tylko czystą treść wpisu.",
 
             SocialPlatformType.Hejto =>
                 $"Napisz angażujący wpis na portal Hejto.pl (maksymalnie 500 znaków) z formatowaniem Markdown na podstawie: {article.Title}. " +
-                $"Przedstaw esencję newsa, link: {primaryUrl} i tagi: #wiadomosci #{categoryTag} #infoskrot #polska #polityka. Zwróć tylko treść.",
+                $"Przedstaw esencję newsa, link: {primaryUrl} i tagi: {hashtagsLine}. Zwróć tylko treść.",
 
             SocialPlatformType.Facebook =>
                 $"Napisz profesjonalny, angażujący post na Fanpage Facebook (około 400-600 znaków) z emotikonami o: {article.Title}. " +
@@ -209,7 +210,7 @@ public class SocialPostGenerator : ISocialPostGenerator
         return cleaned;
     }
 
-    private static string GenerateFallbackTemplate(SocialPlatformType platform, NewsArticle article, string primaryUrl, string categoryTag)
+    private static string GenerateFallbackTemplate(SocialPlatformType platform, NewsArticle article, string primaryUrl, string hashtagsLine)
     {
         var sb = new StringBuilder();
 
@@ -221,7 +222,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 sb.AppendLine(Truncate(article.SummaryText, 300));
                 sb.AppendLine();
                 sb.AppendLine($"Więcej: {primaryUrl}");
-                sb.AppendLine($"#wiadomosci #{categoryTag} #infoskrot #polska");
+                sb.AppendLine(hashtagsLine);
                 break;
 
             case SocialPlatformType.Hejto:
@@ -231,7 +232,7 @@ public class SocialPostGenerator : ISocialPostGenerator
                 sb.AppendLine();
                 sb.AppendLine($"[Źródło artykułu]({primaryUrl})");
                 sb.AppendLine();
-                sb.AppendLine($"#wiadomosci #{categoryTag} #infoskrot #polityka");
+                sb.AppendLine(hashtagsLine);
                 break;
 
             case SocialPlatformType.Facebook:
@@ -255,16 +256,9 @@ public class SocialPostGenerator : ISocialPostGenerator
         return sb.ToString();
     }
 
-    private static string SanitizeTag(string text)
-    {
-        var clean = new string(text.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-        return string.IsNullOrWhiteSpace(clean) ? "wiadomosci" : clean;
-    }
-
     private static string Truncate(string text, int maxLength)
     {
         if (string.IsNullOrEmpty(text) || text.Length <= maxLength) return text;
         return text[..maxLength] + "...";
     }
 }
-

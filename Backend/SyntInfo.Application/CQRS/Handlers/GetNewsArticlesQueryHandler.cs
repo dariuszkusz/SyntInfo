@@ -24,10 +24,10 @@ public class GetNewsArticlesQueryHandler
             SummaryText = a.SummaryText.Trim(),
             PublishedAt = a.PublishedAt,
             SourceUrls = a.SourceUrls,
+            Tags = a.Tags,
             CategoryName = a.Category != null ? a.Category.Name : "General",
             Region = a.Region,
             ImageUrl = a.ImageUrl
         }).ToList();
     }
 }
-
