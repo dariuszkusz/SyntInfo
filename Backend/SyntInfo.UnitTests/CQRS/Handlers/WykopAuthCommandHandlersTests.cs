@@ -18,7 +18,7 @@ public class WykopAuthCommandHandlersTests
             .Returns("https://wykop.pl/connect/abc");
 
         // Act
-        var result = await WykopAuthCommandHandlers.Handle(
+        var result = await WykopAuthCommandHandler.Handle(
             new GetWykopConnectUrlCommand(), _wykopClient, _connectLogger, CancellationToken.None);
 
         // Assert
@@ -30,7 +30,7 @@ public class WykopAuthCommandHandlersTests
     public async Task SaveUserTokens_WhenTokenIsEmpty_ReturnsValidationFailure()
     {
         // Act
-        var result = await WykopAuthCommandHandlers.Handle(
+        var result = await WykopAuthCommandHandler.Handle(
             new SaveWykopUserTokensCommand("   ", "refresh"), _wykopClient, _saveLogger, CancellationToken.None);
 
         // Assert
@@ -43,7 +43,7 @@ public class WykopAuthCommandHandlersTests
     public async Task SaveUserTokens_WhenTokenIsValid_CallsWykopClientAndReturnsSuccess()
     {
         // Act
-        var result = await WykopAuthCommandHandlers.Handle(
+        var result = await WykopAuthCommandHandler.Handle(
             new SaveWykopUserTokensCommand("user-jwt", "refresh-jwt"), _wykopClient, _saveLogger, CancellationToken.None);
 
         // Assert

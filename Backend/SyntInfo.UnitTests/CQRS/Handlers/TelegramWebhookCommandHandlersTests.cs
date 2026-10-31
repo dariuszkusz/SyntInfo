@@ -26,7 +26,7 @@ public class TelegramWebhookCommandHandlersTests
             MessageId: 678);
 
         // Act
-        await TelegramWebhookCommandHandlers.Handle(
+        await TelegramWebhookCommandHandler.Handle(
             command, _bus, _telegramService, _callbackLogger, CancellationToken.None);
 
         // Assert
@@ -49,7 +49,7 @@ public class TelegramWebhookCommandHandlersTests
             MessageId: 678);
 
         // Act
-        await TelegramWebhookCommandHandlers.Handle(
+        await TelegramWebhookCommandHandler.Handle(
             command, _bus, _telegramService, _callbackLogger, CancellationToken.None);
 
         // Assert
@@ -71,7 +71,7 @@ public class TelegramWebhookCommandHandlersTests
         var command = new SetupTelegramWebhookCommand("https://infoskrot.pl/api/Telegram/webhook");
 
         // Act
-        var result = await TelegramWebhookCommandHandlers.Handle(
+        var result = await TelegramWebhookCommandHandler.Handle(
             command, _telegramService, options, _setupLogger, CancellationToken.None);
 
         // Assert
