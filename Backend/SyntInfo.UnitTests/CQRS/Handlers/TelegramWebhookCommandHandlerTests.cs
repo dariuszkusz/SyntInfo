@@ -7,7 +7,7 @@ using Wolverine;
 
 namespace SyntInfo.UnitTests.CQRS.Handlers;
 
-public class TelegramWebhookCommandHandlersTests
+public class TelegramWebhookCommandHandlerTests
 {
     private readonly IMessageBus _bus = Substitute.For<IMessageBus>();
     private readonly ITelegramNotificationService _telegramService = Substitute.For<ITelegramNotificationService>();

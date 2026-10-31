@@ -4,7 +4,7 @@ using SyntInfo.Application.Interfaces;
 
 namespace SyntInfo.UnitTests.CQRS.Handlers;
 
-public class WykopAuthCommandHandlersTests
+public class WykopAuthCommandHandlerTests
 {
     private readonly IWykopClient _wykopClient = Substitute.For<IWykopClient>();
     private readonly ILogger<GetWykopConnectUrlCommand> _connectLogger = Substitute.For<ILogger<GetWykopConnectUrlCommand>>();
