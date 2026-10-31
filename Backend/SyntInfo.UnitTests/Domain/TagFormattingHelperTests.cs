@@ -1,3 +1,4 @@
+using SyntInfo.Domain.Common;
 using SyntInfo.Domain.Entities;
 
 namespace SyntInfo.UnitTests.Domain;
@@ -15,6 +16,15 @@ public class TagFormattingHelperTests
     }
 
     [Theory]
+    [InlineData("Zażółć gęślą jaźń", "zazolcgeslajazn")]
+    [InlineData("ŚWIAT & Łódź", "swiatlodz")]
+    public void NormalizeAsciiTag_WhenPolishDiacritics_ConvertsToAsciiLowercase(string input, string expected)
+    {
+        var result = TagFormattingHelper.NormalizeAsciiTag(input, "wiadomosci");
+        result.Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
@@ -23,6 +33,13 @@ public class TagFormattingHelperTests
     {
         var result = TagFormattingHelper.SanitizeTag(input, "fallbacktag");
         result.Should().Be("fallbacktag");
+    }
+
+    [Fact]
+    public void BuildHashtagsForArticle_WhenArticleIsNull_ThrowsArgumentNullException()
+    {
+        var act = () => TagFormattingHelper.BuildHashtagsForArticle(null!);
+        act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]

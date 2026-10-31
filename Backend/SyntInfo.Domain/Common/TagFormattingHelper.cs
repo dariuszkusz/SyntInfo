@@ -1,4 +1,6 @@
-namespace SyntInfo.Domain.Entities;
+using SyntInfo.Domain.Entities;
+
+namespace SyntInfo.Domain.Common;
 
 public static class TagFormattingHelper
 {
@@ -67,16 +69,25 @@ public static class TagFormattingHelper
             return fallback;
         }
 
-        return sanitized
-            .Replace('ą', 'a')
-            .Replace('ć', 'c')
-            .Replace('ę', 'e')
-            .Replace('ł', 'l')
-            .Replace('ń', 'n')
-            .Replace('ó', 'o')
-            .Replace('ś', 's')
-            .Replace('ź', 'z')
-            .Replace('ż', 'z');
+        return string.Create(sanitized.Length, sanitized, static (span, src) =>
+        {
+            for (int i = 0; i < src.Length; i++)
+            {
+                span[i] = src[i] switch
+                {
+                    'ą' => 'a',
+                    'ć' => 'c',
+                    'ę' => 'e',
+                    'ł' => 'l',
+                    'ń' => 'n',
+                    'ó' => 'o',
+                    'ś' => 's',
+                    'ź' => 'z',
+                    'ż' => 'z',
+                    _ => src[i]
+                };
+            }
+        });
     }
 
     public static string GetRegionTag(SourceRegion region) => region switch
@@ -139,6 +150,8 @@ public static class TagFormattingHelper
     /// </summary>
     public static IReadOnlyList<string> BuildHashtagsForArticle(NewsArticle article, int maxTags = 7)
     {
+        ArgumentNullException.ThrowIfNull(article);
+
         var rawTags = new List<string>
         {
             "wiadomosci",
@@ -198,8 +211,11 @@ public static class TagFormattingHelper
         return filtered;
     }
 
-    public static string FormatHashtagsLineForArticle(NewsArticle article, int maxTags = 7) =>
-        string.Join(" ", BuildHashtagsForArticle(article, maxTags));
+    public static string FormatHashtagsLineForArticle(NewsArticle article, int maxTags = 7)
+    {
+        ArgumentNullException.ThrowIfNull(article);
+        return string.Join(" ", BuildHashtagsForArticle(article, maxTags));
+    }
 
     /// <summary>
     /// Buduje dynamiczną listę hashtagów dla wydania zbiorczego (Digest) na podstawie przekrojowej zawartości artykułów.
