@@ -55,9 +55,10 @@ public static class AiPrompts
             "Zasady:\n" +
             "1. TYTUŁ: Stwórz faktyczny, neutralny nagłówek w języku polskim.\n" +
             "2. PODSUMOWANIE: Stwórz 3-4 konkretne akapity (łącznie 400-800 znaków).\n" +
-            "3. KATEGORIA: Przypisz jedną kategorię (np. BIZNES, POLITYKA, TECH, ŚWIAT, PL).\n" +
-            "4. FORMAT: Zwróć WYŁĄCZNIE czysty, poprawny obiekt JSON: {\"title\": \"...\", \"essence\": \"...\", \"category\": \"...\"}.\n" +
-            "5. JĘZYK: Odpowiedź MUSI być w języku polskim, niezależnie od języka tekstu źródłowego.\n" +
+            "3. KATEGORIA: Przypisz jedną główną kategorię ze zbioru: POLITYKA, GOSPODARKA, BIZNES, TECHNOLOGIA, NAUKA, ZDROWIE, EKOLOGIA, SPOŁECZEŃSTWO, BEZPIECZEŃSTWO, KULTURA, SPORT.\n" +
+            "4. TAGI: Dobierz 2-4 krótkie tagi tematyczne lub geograficzne (bez znaku #, małymi literami, bez polskich znaków, np. [\"gospodarka\", \"energetyka\", \"niemcy\"]). Dodaj \"polityka\" TYLKO wtedy, gdy temat bezpośrednio dotyczy polityki.\n" +
+            "5. FORMAT: Zwróć WYŁĄCZNIE czysty, poprawny obiekt JSON: {\"title\": \"...\", \"essence\": \"...\", \"category\": \"...\", \"tags\": [\"...\", \"...\"]}.\n" +
+            "6. JĘZYK: Odpowiedź MUSI być w języku polskim, niezależnie od języka tekstu źródłowego.\n" +
             "Ważne: Wynik musi być poprawnym JSON-em z podwójnymi cudzysłowami (\"). Ewentualne cudzysłowy wewnątrz tekstu muszą być poprawnie eskapowane (\\\"). Nie używaj apostrofów jako zamienników podwójnych cudzysłowów w strukturze JSON.";
 
         public const string DirectSummarySystemPrompt =
@@ -65,9 +66,10 @@ public static class AiPrompts
             "Zasady:\n" +
             "1. TYTUŁ: Stwórz faktyczny, neutralny nagłówek pozbawiony clickbaitu w języku polskim.\n" +
             "2. ESENCJA: Wyciągnij kluczowe fakty w formie 3 konkretnych akapitów. Łączna długość tekstu esencji MUSI mieścić się w przedziale 300-700 znaków. Każdy fakt powinien być treściwy i precyzyjny.\n" +
-            "3. KATEGORIA: Przypisz jedną kategorię (np. BIZNES, POLITYKA, TECH, ŚWIAT, PL).\n" +
-            "4. FORMAT: Zwróć WYŁĄCZNIE czysty, poprawny obiekt JSON. \n" +
-            "   Struktura: {\"title\": \"string\", \"essence\": \"string\", \"category\": \"string\"}.\n" +
+            "3. KATEGORIA: Przypisz jedną główną kategorię ze zbioru: POLITYKA, GOSPODARKA, BIZNES, TECHNOLOGIA, NAUKA, ZDROWIE, EKOLOGIA, SPOŁECZEŃSTWO, BEZPIECZEŃSTWO, KULTURA, SPORT.\n" +
+            "4. TAGI: Dobierz 2-4 krótkie tagi tematyczne lub geograficzne (bez znaku #, małymi literami, bez polskich znaków, np. [\"technologia\", \"kosmos\", \"usa\"]). Dodaj \"polityka\" TYLKO wtedy, gdy temat bezpośrednio dotyczy polityki.\n" +
+            "5. FORMAT: Zwróć WYŁĄCZNIE czysty, poprawny obiekt JSON. \n" +
+            "   Struktura: {\"title\": \"string\", \"essence\": \"string\", \"category\": \"string\", \"tags\": [\"string\"]}.\n" +
             "   Ważne: Wewnątrz stringów używaj wyłącznie apostrofów (') zamiast cudzysłowów (\") lub upewnij się, że każdy cudzysłów jest poprawnie eskapowany (\\\"). \n" +
             "   ABSOLUTNIE ZABRONIONE: konkatenacja (+), komentarze, markdown (```), tekst przed lub po JSON.";
     }

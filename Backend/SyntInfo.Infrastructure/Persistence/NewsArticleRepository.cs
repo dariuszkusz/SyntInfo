@@ -18,6 +18,7 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
     public async Task<List<NewsArticle>> GetSelectedForDigestAsync(CancellationToken cancellationToken = default)
     {
         return await _db.NewsArticles
+            .Include(a => a.Category)
             .Where(a => a.IsSelectedForDigest && a.DigestPublishedAt == null)
             .OrderByDescending(a => a.PublishedAt)
             .ToListAsync(cancellationToken);
@@ -25,7 +26,7 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
 
     public async Task<List<NewsArticle>> GetActiveArticlesAsync(int limit, CancellationToken cancellationToken = default)
     {
-        return await FilterValidActive(_db.NewsArticles)
+        return await FilterValidActive(_db.NewsArticles.Include(a => a.Category))
             .OrderByDescending(a => a.PublishedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -33,7 +34,7 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
 
     public async Task<List<NewsArticle>> GetArticlesForCurationAsync(int limit, CancellationToken cancellationToken = default)
     {
-        return await FilterValidActive(_db.NewsArticles)
+        return await FilterValidActive(_db.NewsArticles.Include(a => a.Category))
             .Where(a => a.DigestPublishedAt == null)
             .OrderByDescending(a => a.PublishedAt)
             .Take(limit)
@@ -42,7 +43,7 @@ public class NewsArticleRepository : Repository<NewsArticle>, INewsArticleReposi
 
     public async Task<List<NewsArticle>> GetArticlesForCurationByRegionAsync(SourceRegion region, int limit, CancellationToken cancellationToken = default)
     {
-        return await FilterValidActive(_db.NewsArticles)
+        return await FilterValidActive(_db.NewsArticles.Include(a => a.Category))
             .Where(a => a.Region == region && a.DigestPublishedAt == null)
             .OrderByDescending(a => a.PublishedAt)
             .Take(limit)

@@ -51,7 +51,7 @@ public class SummarizeArticleCommandHandler
             }
 
             // 2. Wygenerowanie streszczenia przez Redaktora AI
-            var (displayTitle, essence, categoryName) = await GenerateSummaryAsync(factsJson, command.Title, safeToken);
+            var (displayTitle, essence, categoryName, rawTags) = await GenerateSummaryAsync(factsJson, command.Title, safeToken);
 
             if (!AiSummaryResponseParser.IsValidSummary(displayTitle, essence))
             {
@@ -63,9 +63,10 @@ public class SummarizeArticleCommandHandler
             var imageUrl = await ResolveImageUrlAsync(command, searchResult.ImageUrl, safeToken);
             var embedding = await _openRouterClient.GenerateEmbeddingsAsync(essence, safeToken);
 
-            // 4. Kategoria i utrwalenie w bazie (Create or Update)
+            // 4. Kategoria, tagi i utrwalenie w bazie (Create or Update)
+            var sanitizedTags = TagFormattingHelper.SanitizeAndFilterTags(rawTags, command.Region);
             var category = await GetOrCreateCategoryAsync(categoryName, safeToken);
-            await SaveOrUpdateArticleAsync(command, displayTitle, essence, factsJson, imageUrl, embedding, category, safeToken);
+            await SaveOrUpdateArticleAsync(command, displayTitle, essence, factsJson, imageUrl, embedding, category, sanitizedTags, safeToken);
 
             await _uow.SaveChangesAsync(safeToken);
         }
@@ -85,7 +86,7 @@ public class SummarizeArticleCommandHandler
         return AiSummaryResponseParser.CleanJsonResponse(factsJsonRaw);
     }
 
-    private async Task<(string Title, string Essence, string CategoryName)> GenerateSummaryAsync(
+    private async Task<(string Title, string Essence, string CategoryName, List<string> Tags)> GenerateSummaryAsync(
         string factsJson,
         string fallbackTitle,
         CancellationToken cancellationToken)
@@ -140,6 +141,7 @@ public class SummarizeArticleCommandHandler
         string? resolvedImageUrl,
         float[] embedding,
         NewsCategory category,
+        List<string> tags,
         CancellationToken cancellationToken)
     {
         var urls = CombineSourceUrls(command.Url, command.AdditionalUrls);
@@ -157,6 +159,7 @@ public class SummarizeArticleCommandHandler
             article.SummaryText = essence;
             article.SourceUrls = urls;
             article.Category = category;
+            article.Tags = tags;
             article.Embedding = vector;
             article.DeepContent = factsJson;
             article.IsActive = true;
@@ -177,6 +180,7 @@ public class SummarizeArticleCommandHandler
                 SummaryText = essence,
                 PublishedAt = command.PublishedAt,
                 SourceUrls = urls,
+                Tags = tags,
                 Region = command.Region,
                 Category = category,
                 Embedding = vector,

@@ -100,14 +100,6 @@ public static class PublishHejtoArticlesSeparatelyCommandHandler
     {
         var sb = new StringBuilder();
         var primaryUrl = article.SourceUrls.FirstOrDefault() ?? "https://www.infoskrót.pl";
-        var categoryTag = TagFormattingHelper.SanitizeTag(article.Category?.Name);
-        var regionTag = article.Region switch
-        {
-            SourceRegion.Poland => "polska",
-            SourceRegion.World => "swiat",
-            SourceRegion.Positive => "dobrewiadomosci",
-            _ => "polska"
-        };
 
         sb.AppendLine($"### {article.Title}");
         sb.AppendLine();
@@ -116,16 +108,7 @@ public static class PublishHejtoArticlesSeparatelyCommandHandler
         sb.AppendLine($"🔗 Źródło: [{article.Title}]({primaryUrl})");
         sb.AppendLine("Więcej wiadomości i pełne archiwum: [www.infoskrót.pl](https://www.infoskrót.pl)");
         sb.AppendLine();
-
-        var tags = new List<string> { "#wiadomosci", "#infoskrot", $"#{regionTag}" };
-        if (!string.IsNullOrWhiteSpace(categoryTag) &&
-            !tags.Contains($"#{categoryTag}", StringComparer.OrdinalIgnoreCase))
-        {
-            tags.Add($"#{categoryTag}");
-        }
-        tags.Add("#polityka");
-
-        sb.AppendLine(string.Join(" ", tags));
+        sb.AppendLine(TagFormattingHelper.FormatHashtagsLineForArticle(article));
         return sb.ToString();
     }
 
@@ -145,14 +128,4 @@ public static class PublishHejtoArticlesSeparatelyCommandHandler
     /// </summary>
     private static TimeSpan CalculateTotalDuration(int totalCount, int intervalSeconds) =>
         totalCount <= 1 ? TimeSpan.Zero : TimeSpan.FromSeconds((totalCount - 1) * intervalSeconds);
-
-    private static string SanitizeTag(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return string.Empty;
-        }
-
-        return new string(text.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-    }
 }
