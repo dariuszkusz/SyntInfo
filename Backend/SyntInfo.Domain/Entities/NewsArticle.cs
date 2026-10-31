@@ -14,6 +14,9 @@ public class NewsArticle
     // We can use a simple List<string> for PostgreSQL which supports text arrays natively
     public List<string> SourceUrls { get; set; } = new();
 
+    /// <summary>Dynamicznie przypisane tagi tematyczne z modelu AI oraz kategoryzacji (bez znaku #).</summary>
+    public List<string> Tags { get; set; } = new();
+
     public Vector? Embedding { get; set; }
 
     public Guid CategoryId { get; set; }
@@ -31,4 +34,3 @@ public class NewsArticle
     /// <summary>Kiedy artykuł został opublikowany w ramach wydania zbiorczego.</summary>
     public DateTime? DigestPublishedAt { get; set; }
 }
-

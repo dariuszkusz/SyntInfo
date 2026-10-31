@@ -64,7 +64,7 @@ internal static class AiSummaryResponseParser
         return cleaned;
     }
 
-    public static (string Title, string Essence, string CategoryName) ParseEditorResponse(
+    public static (string Title, string Essence, string CategoryName, List<string> Tags) ParseEditorResponse(
         string editorJson,
         string editorResponseRaw,
         string fallbackTitle,
@@ -82,7 +82,8 @@ internal static class AiSummaryResponseParser
                 return (
                     structuredContent.Title.Trim(),
                     structuredContent.Essence.Trim(),
-                    structuredContent.Category?.Trim() ?? "General"
+                    structuredContent.Category?.Trim() ?? "General",
+                    structuredContent.Tags ?? new List<string>()
                 );
             }
         }
@@ -91,7 +92,7 @@ internal static class AiSummaryResponseParser
             logger.LogWarning(ex, "Błąd parsowania JSON z Redaktora. Raw: {Raw}", editorResponseRaw);
         }
 
-        return (fallbackTitle, string.Empty, "General");
+        return (fallbackTitle, string.Empty, "General", new List<string>());
     }
 
     public static bool HasValidFacts(string? factsJson)
@@ -160,4 +161,3 @@ internal static class AiSummaryResponseParser
         return true;
     }
 }
-

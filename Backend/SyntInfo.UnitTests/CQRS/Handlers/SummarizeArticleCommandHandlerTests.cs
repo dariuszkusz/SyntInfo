@@ -68,7 +68,7 @@ public class SummarizeArticleCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenEditorReturnsValidJson_SavesArticle()
+    public async Task Handle_WhenEditorReturnsValidJson_SavesArticleWithSanitizedTags()
     {
         // Arrange
         var command = new SummarizeArticleCommand(
@@ -77,10 +77,10 @@ public class SummarizeArticleCommandHandlerTests
             Url: "https://example.com/science",
             PublishedAt: DateTime.UtcNow,
             SourceId: Guid.NewGuid(),
-            Region: SourceRegion.Poland
+            Region: SourceRegion.Positive
         );
 
-        var validJson = "{\"title\": \"Skrócony tytuł\", \"essence\": \"To jest bardzo rzetelne i wartościowe streszczenie artykułu informacyjnego.\", \"category\": \"Nauka\"}";
+        var validJson = "{\"title\": \"Skrócony tytuł\", \"essence\": \"To jest bardzo rzetelne i wartościowe streszczenie artykułu informacyjnego.\", \"category\": \"Nauka\", \"tags\": [\"kosmos\", \"polityka\", \"odkrycia\"]}";
         _googleAiStudioClient.GenerateSummaryFromFactsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(validJson);
         _openRouterClient.GenerateEmbeddingsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -91,10 +91,13 @@ public class SummarizeArticleCommandHandlerTests
         // Act
         await handler.Handle(command, CancellationToken.None);
 
-        // Assert - artykuł został poprawnie zapisany
+        // Assert - artykuł został poprawnie zapisany, a zakazany tag "polityka" dla sekcji Positive odfiltrowany
         await _newsArticleRepo.Received(1).AddAsync(Arg.Is<NewsArticle>(a =>
             a.Title == "Skrócony tytuł" &&
-            a.SummaryText.Contains("rzetelne i wartościowe")), Arg.Any<CancellationToken>());
+            a.SummaryText.Contains("rzetelne i wartościowe") &&
+            a.Tags.Contains("kosmos") &&
+            a.Tags.Contains("odkrycia") &&
+            !a.Tags.Contains("polityka")), Arg.Any<CancellationToken>());
         await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
