@@ -3,7 +3,7 @@ using Wolverine;
 
 namespace SyntInfo.Application.CQRS.Handlers;
 
-public static class TelegramWebhookCommandHandlers
+public static class TelegramWebhookCommandHandler
 {
     public static async Task Handle(
         ProcessTelegramCallbackCommand command,

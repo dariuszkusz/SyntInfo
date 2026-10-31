@@ -2,7 +2,7 @@ using SyntInfo.Application.CQRS.Commands;
 
 namespace SyntInfo.Application.CQRS.Handlers;
 
-public static class WykopAuthCommandHandlers
+public static class WykopAuthCommandHandler
 {
     public static async Task<GetWykopConnectUrlResult> Handle(
         GetWykopConnectUrlCommand _,
